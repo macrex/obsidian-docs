@@ -46,6 +46,30 @@ cp ~/repos/obsidian-docs/scripts/validar_vault.py "$OBSIDIAN_VAULT/.scripts/"
 python "$OBSIDIAN_VAULT/.scripts/validar_vault.py" --resumo
 ```
 
+## Servidor MCP (opcional)
+
+`mcp/servidor_vault.py` expõe o vault como ferramentas MCP — a LLM consulta a doc por busca
+indexável em vez de varrer arquivo por arquivo. Zero dependências (Python 3.9+, só stdlib).
+Registre uma vez, vale em qualquer projeto:
+
+```bash
+claude mcp add --scope user vault-docs -- python3 ~/repos/obsidian-docs/mcp/servidor_vault.py
+```
+
+Windows: troque `python3` por `python`. O caminho do vault vem de `OBSIDIAN_VAULT`; sem a
+variável, acrescente `--vault <caminho>` ao fim do comando. Ferramentas (todas só leitura):
+
+| Ferramenta | O que faz |
+|---|---|
+| `visao_geral` | Panorama: projetos, contagem por tipo, notas recentes. |
+| `buscar` | Full-text sem acento/caixa, filtros `projeto`/`tipo`/`status`, com trecho. |
+| `listar_notas` | Caminho + frontmatter, mais recentes primeiro. |
+| `ler_nota` | Conteúdo integral, por caminho relativo ou nome de wikilink. |
+| `conexoes` | Wikilinks de saída e backlinks — navegação pelo grafo. |
+
+As skills continuam funcionando sem ele — o MCP só torna achar e ler doc mais barato e direto.
+Quem abre este repo no Claude Code já ganha o servidor via `.mcp.json` (escopo de projeto).
+
 ## CLAUDE.md
 
 As skills só entram sozinhas se o roteamento estiver no seu `CLAUDE.md`. O mínimo:
@@ -80,7 +104,8 @@ Opcionais, na ordem do que mais muda o resultado:
 
 ## Notas
 
-- Funciona com o Obsidian fechado: as skills escrevem no filesystem, sem MCP e sem plugin.
+- Funciona com o Obsidian fechado: as skills escrevem no filesystem, sem plugin e sem exigir
+  MCP — o servidor acima é opcional, só para consulta.
 - A migração em lote sempre mostra `arquivo → destino → tipo` e **espera confirmação** antes de
   escrever. Nada é apagado do repo — um `.md` pode ser código operacional (instrução de build,
   nota dentro de lib vendorizada) e o classificador não sabe.

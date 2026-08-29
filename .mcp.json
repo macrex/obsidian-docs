@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "vault-docs": {
+      "command": "python3",
+      "args": ["mcp/servidor_vault.py"]
+    }
+  }
+}
