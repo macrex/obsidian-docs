@@ -9,7 +9,7 @@ description: >
 
 # obsidian-docs — documentação de projetos no Obsidian
 
-# Versao: 8
+# Versao: 9
 
 Todo acesso ao vault é pelo MCP `vault-docs` (`mcp/servidor_vault.py` deste repo). Ele sabe
 onde o vault fica e aplica as convenções — pasta por tipo, nome com data, frontmatter, link e
@@ -18,8 +18,9 @@ e escreve o conteúdo; ele cuida do **como**. Estrutura: `Home.md` → `<projeto
 (hub) → pastas por tipo; toda nota linka o hub e está listada nele.
 
 **NUNCA** Read/Grep/Glob/Write/Edit direto nos arquivos do vault, nem `git` nele. Sem as
-ferramentas `mcp__vault-docs__*` na sessão → pare e peça para registrar o servidor
-(`python <repo>/mcp/servidor_vault.py --instalar`, ver README).
+ferramentas `mcp__vault-docs__*` na sessão → pare: registrar o servidor
+(`python <repo>/mcp/servidor_vault.py --instalar`, ver README) ou, se `claude mcp list` já o
+mostra, reiniciar o Claude Code — sessão aberta antes do registro não o carrega.
 
 ## Ferramentas
 

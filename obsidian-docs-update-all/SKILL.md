@@ -9,10 +9,11 @@ description: >
 
 # obsidian-docs-update-all — migração do workspace inteiro pro vault
 
-# Versao: 3
+# Versao: 4
 
 O vault é acessado só pelo MCP `vault-docs` (skill `obsidian-docs`). Sem as ferramentas
-`mcp__vault-docs__*` na sessão → pare e peça para registrar o servidor (README).
+`mcp__vault-docs__*` na sessão → pare: registrar o servidor (README) ou reiniciar o Claude
+Code se já registrado.
 
 ## Papel
 

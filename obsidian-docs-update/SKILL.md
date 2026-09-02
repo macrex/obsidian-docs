@@ -9,11 +9,11 @@ description: >
 
 # obsidian-docs-update — migração de docs do projeto pro vault
 
-# Versao: 6
+# Versao: 7
 
 O vault é acessado só pelo MCP `vault-docs` (skill `obsidian-docs`): `salvar_nota` grava cada
 arquivo com pasta, frontmatter, hub, `Home.md` e git. Sem as ferramentas `mcp__vault-docs__*`
-na sessão → pare e peça para registrar o servidor (README).
+na sessão → pare: registrar o servidor (README) ou reiniciar o Claude Code se já registrado.
 
 Faxina/importação em lote: leva toda a documentação de um projeto pro vault. Roda DENTRO do
 projeto, uma vez (ou quando acumular sujeira). O dia a dia — criar/ler doc nova — é da skill
