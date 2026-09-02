@@ -9,16 +9,15 @@ description: >
 
 # obsidian-docs-update — migração de docs do projeto pro vault
 
-# Versao: 5
+# Versao: 6
 
-`$VAULT`: resolva pela ordem da skill `obsidian-docs` — variável de ambiente `OBSIDIAN_VAULT`,
-senão o caminho declarado no `CLAUDE.md`, senão pergunte. Nunca invente. Vault é repo git
-(`git -C "$VAULT" rev-parse --is-inside-work-tree`)? Então `git -C "$VAULT" pull --rebase
---autostash` antes de ler ou escrever; não é → pule todo passo de git desta skill.
+O vault é acessado só pelo MCP `vault-docs` (skill `obsidian-docs`): `salvar_nota` grava cada
+arquivo com pasta, frontmatter, hub, `Home.md` e git. Sem as ferramentas `mcp__vault-docs__*`
+na sessão → pare e peça para registrar o servidor (README).
 
-Faxina/importação em lote: leva toda a documentação de um projeto pro vault
-(`$VAULT`). Roda DENTRO do projeto, uma vez (ou quando acumular sujeira).
-O dia a dia — criar/ler doc nova — é da skill `obsidian-docs`.
+Faxina/importação em lote: leva toda a documentação de um projeto pro vault. Roda DENTRO do
+projeto, uma vez (ou quando acumular sujeira). O dia a dia — criar/ler doc nova — é da skill
+`obsidian-docs`.
 
 Depois da migração vale a regra permanente: doc gerada ou atualizada daqui em diante nasce
 **direto no vault**, nunca mais no repo.
@@ -39,18 +38,18 @@ instruções de build. Um `.md` no repo pode ser código operacional; o classifi
 
 ## Fluxo
 
-Detalhe de cada passo (o que varrer, o que nunca migrar, formato do plano, padronização,
-comandos de commit): `references/procedimento.md`.
+Detalhe de cada passo (o que varrer, o que nunca migrar, formato do plano, padronização):
+`references/procedimento.md`.
 
 1. **Inventário** — varrer o repo atrás de doc; nunca incluir arquivo operacional
    (`README`, `CLAUDE.md`, `SKILL.md`, configs).
 2. **Plano de migração — GATE OBRIGATÓRIO**: tabela `arquivo → destino → tipo` ao usuário.
    **Aguarde confirmação**; ele pode excluir itens.
-3. **Estrutura no vault** — reusar a que já existe; criar só o que a migração precisa.
-4. **Copiar + padronizar + indexar** — nome `YYYY-MM-DD <titulo>.md`, frontmatter padrão,
-   wikilinks, entrada no hub.
+3. **Projeto no vault** — `visao_geral`: hub existente ganha; projeto novo de verdade →
+   `descricao_projeto` e `repo` na primeira `salvar_nota`.
+4. **Copiar** — uma `salvar_nota` por arquivo confirmado: `data` do 1º commit, conteúdo
+   original como `corpo`, `resumo` de 1 linha, wikilinks entre notas relacionadas.
 5. **Checagem graphify** (só se o projeto usa) — `graphify-out/` no `.gitignore` e fora do
    index; nunca vai pro vault.
 6. **Repo do projeto — NÃO TOCAR** (regra dura acima).
-7. **Commit do vault** — commit → `pull --rebase` → push, nessa ordem (se for repo git).
-8. **Relatório final** — o que foi copiado, o que ficou de fora e por quê.
+7. **Relatório final** — o que foi copiado, o que ficou de fora e por quê.

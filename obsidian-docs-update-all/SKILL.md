@@ -9,12 +9,10 @@ description: >
 
 # obsidian-docs-update-all — migração do workspace inteiro pro vault
 
-# Versao: 2
+# Versao: 3
 
-`$VAULT`: resolva pela ordem da skill `obsidian-docs` — variável de ambiente `OBSIDIAN_VAULT`,
-senão o caminho declarado no `CLAUDE.md`, senão pergunte. Nunca invente. Vault é repo git
-(`git -C "$VAULT" rev-parse --is-inside-work-tree`)? Então `git -C "$VAULT" pull --rebase
---autostash` antes de ler ou escrever; não é → pule todo passo de git desta skill.
+O vault é acessado só pelo MCP `vault-docs` (skill `obsidian-docs`). Sem as ferramentas
+`mcp__vault-docs__*` na sessão → pare e peça para registrar o servidor (README).
 
 ## Papel
 
@@ -60,14 +58,14 @@ nada é copiado.
 
 ### 4. Migrar (sequencial, um projeto por vez)
 
-Vault versionado é git — **NUNCA migrar dois projetos em paralelo**
-(conflito de push/rebase). Para cada projeto confirmado, na ordem:
-subagent `vault-migrador` em **modo migração** com a lista confirmada
-(mesma regra de modelo do passo 2, nunca o modelo da sessão).
-Ele aplica o fluxo da `obsidian-docs-update`: estrutura no vault (reusa se
-existir), **copiar** + frontmatter (data do 1º commit) + wikilinks + hub +
-`Home.md`, checagem graphify (`graphify-out/` no `.gitignore`, fora do
-index), commit do vault com `pull --rebase` antes e push.
+O servidor commita e empurra o vault a cada nota — **NUNCA migrar dois
+projetos em paralelo** (push/rebase concorrentes no mesmo repo). Para cada
+projeto confirmado, na ordem: subagent `vault-migrador` em **modo migração**
+com a lista confirmada (mesma regra de modelo do passo 2, nunca o modelo da
+sessão). Ele aplica o fluxo da `obsidian-docs-update`: `visao_geral` (hub
+existente ganha), uma `salvar_nota` por arquivo (data do 1º commit,
+conteúdo original, resumo, wikilinks) e a checagem graphify
+(`graphify-out/` no `.gitignore`, fora do index).
 
 **O repo do projeto NUNCA é tocado**: migração é cópia, nunca recorte. Sem
 `git rm`, sem apagar, sem commit no projeto.

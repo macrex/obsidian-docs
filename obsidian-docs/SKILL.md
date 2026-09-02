@@ -9,110 +9,88 @@ description: >
 
 # obsidian-docs — documentação de projetos no Obsidian
 
-# Versao: 6
+# Versao: 8
 
-## `$VAULT` — resolver ANTES de qualquer leitura ou escrita
+Todo acesso ao vault é pelo MCP `vault-docs` (`mcp/servidor_vault.py` deste repo). Ele sabe
+onde o vault fica e aplica as convenções — pasta por tipo, nome com data, frontmatter, link e
+entrada no hub, `Home.md`, commit → `pull --rebase` → push. Você decide **o quê** documentar
+e escreve o conteúdo; ele cuida do **como**. Estrutura: `Home.md` → `<projeto>/<projeto>.md`
+(hub) → pastas por tipo; toda nota linka o hub e está listada nele.
 
-`$VAULT` é a pasta de projetos dentro do vault Obsidian. Aparece em toda esta skill e nas irmãs
-`obsidian-docs-update` / `obsidian-docs-update-all`. Ordem de resolução:
+**NUNCA** Read/Grep/Glob/Write/Edit direto nos arquivos do vault, nem `git` nele. Sem as
+ferramentas `mcp__vault-docs__*` na sessão → pare e peça para registrar o servidor
+(`python <repo>/mcp/servidor_vault.py --instalar`, ver README).
 
-1. Variável de ambiente `OBSIDIAN_VAULT` (cheque com `echo "$OBSIDIAN_VAULT"`) — se existir,
-   é ela. Recomendado: resolve sozinha máquinas diferentes, Windows e macOS/Linux, sem editar
-   a skill.
-2. Caminho declarado no `CLAUDE.md` (global ou do projeto) do usuário.
-3. Nenhum dos dois → **pergunte ao usuário** e peça para registrar em (1) ou (2).
+## Ferramentas
 
-**NUNCA invente o caminho, nunca escreva fora dele.** Nos exemplos abaixo os caminhos usam `/`;
-no Windows o separador é `\`.
-
-### Sincronização (só se o vault for um repo git)
-
-Muita gente versiona o vault e o compartilha entre máquinas. Detecte:
-
-```bash
-git -C "$VAULT" rev-parse --is-inside-work-tree
-```
-
-Deu certo → rode `git -C "$VAULT" pull --rebase --autostash` na primeira vez que a sessão tocar
-o vault e de novo antes de cada edição. Sem isso você lê versão velha e o push quebra em
-conflito. O `--autostash` não é opcional: o Obsidian reescreve `.obsidian/graph.json` sozinho e
-o `pull --rebase` puro aborta. Não é repo git → pule todo passo de git desta skill.
-
-Detalhe de cada fluxo (salvar passo a passo, template de hub, lifecycle de status, ler/achar
-doc, Mapa do Codigo, comandos de commit): `references/fluxos.md`. Abra antes de escrever.
+| Ferramenta | Uso |
+|---|---|
+| `visao_geral` | projetos existentes, contagem por tipo, notas recentes — primeiro passo quando não sabe o nome do projeto |
+| `buscar` | full-text sem acento/caixa; filtros `projeto`, `tipo`, `status` |
+| `listar_notas` | metadados, mais recentes primeiro (última evolução: `projeto=X tipo=evolucao limite=1`) |
+| `ler_nota` | conteúdo integral, por caminho ou nome de wikilink |
+| `conexoes` | wikilinks de saída e backlinks |
+| `salvar_nota` | nota nova — faz pasta, nome, frontmatter, link e entrada no hub, hub/Home novos, git |
+| `atualizar_nota` | nota existente — corpo, status, tags, resumo do hub ou sucessora (obsoleta), git |
 
 ## Regra dura
 
-- Todo artefato `.md` de documentação vai para o vault `$VAULT`. NUNCA criar doc
-  no repo do projeto, NUNCA commitar doc lá.
-- Gerar, atualizar ou regravar doc existente → editar a nota DIRETAMENTE no vault (in-place).
-  Nunca recriar no repo, nunca manter cópia local.
-- Ficam no repo do projeto (fora desta skill): `CLAUDE.md`, `AGENTS.md`, `SKILL.md`,
+- Todo artefato `.md` de documentação vai para o vault via `salvar_nota`. NUNCA criar doc no
+  repo do projeto, NUNCA commitar doc lá. Ficam no repo: `CLAUDE.md`, `AGENTS.md`, `SKILL.md`,
   `README.md`, configs — arquivos operacionais que ferramentas leem em lugar fixo.
-- Escrita por filesystem direto (Write/Edit). Sem MCP, sem plugin; Obsidian não precisa estar aberto.
-- **Nenhuma nota nasce órfã**: toda nota tem o link do hub (`Projeto: [[<projeto>]]`) no corpo E
-  uma entrada no hub. Sem os dois ela some do grafo. Wikilink usa só o NOME da nota
-  (`[[2026-07-25 Titulo]]`) — caminho com pasta (`[[projeto/2026-07-25 Titulo]]`) quebra.
+- Doc existente que muda → `atualizar_nota` na própria nota (in-place). Nunca recriar no repo,
+  nunca cópia local.
+- Projeto = nome da pasta do repo git, minúsculo, sem acento. **Hub existente sempre ganha**:
+  na primeira gravação da sessão num projeto, `visao_geral` (ou `ler_nota <projeto>`) para não
+  duplicar — repo `pagamentos-repo` pertence ao hub `pagamentos` que já existe. Projeto novo de
+  verdade → `salvar_nota` com `descricao_projeto` (1 linha) e `repo` (caminho local).
 
-## Estrutura do vault
+## Salvar: o que você passa
 
-```
-$VAULT/
-  Home.md                       ← hub global: wikilink p/ cada projeto
-  <projeto>/
-    <projeto>.md                ← hub do projeto (nó central no graph)
-    Mapa do Codigo <projeto>.md ← curada, gerada do graphify-out (opcional, pós-graphify)
-    Specs/                      ← specs + planos + designs
-      Tickets - <artefato>/     ← os tickets derivados DAQUELE artefato (ver abaixo)
-    Arquitetura/                ← ADRs, domínio, docs de arquitetura
-    Bugs/
-    Evolucoes/
-    Analises/                   ← pesquisas, estudos, relatórios avulsos
-```
+`salvar_nota(projeto, tipo, titulo, corpo, resumo, …)`:
 
-- Nome do projeto = nome da pasta do repo git. Minúsculo, sem acento.
-- Pastas de tipo criadas SOB DEMANDA, só quando o primeiro artefato daquele tipo aparecer.
+- `tipo` → pasta: `spec`/`plano` → `Specs/`; `bug` → `Bugs/`; `evolucao` → `Evolucoes/`;
+  `arquitetura`/`adr` → `Arquitetura/`; `analise` (pesquisa, estudo, relatório, review) →
+  `Analises/`; `mapa` → `Mapa do Codigo <projeto>.md` na raiz do projeto (regrava).
+- `titulo`: curto, acento permitido. A nota vira `YYYY-MM-DD <titulo>.md` (hoje, ou `data`).
+- `corpo`: markdown. Vá direto ao conteúdo — o servidor põe `# titulo` e `Projeto: [[projeto]]`
+  se faltarem. Linke notas relacionadas por `[[nome da nota]]` (só o nome, nunca a pasta): spec
+  que originou o bug, evolução que resolveu, nota anterior. O grafo do Obsidian nasce daí.
+- `resumo`: 1 linha — é a entrada da nota no hub.
+- `status`: `rascunho` (proposta) | `ativo` (padrão) | `resolvido` | `obsoleto`.
+  `tags`: 1-3, kebab-case sem acento, opcional.
+- **Ticket** de um artefato (quebra de spec/plano em tarefas, inclusive por skills externas como
+  `to-tickets`): `tipo=plano` + `artefato=<nome da nota de origem>`. Vai para
+  `Specs/Tickets - <artefato>/`, nunca solto em `Specs/` — muitas notas de uma vez afogam o
+  artefato que as gerou.
 
-## Tickets sempre em pasta própria (regra dura)
+## Lifecycle (`atualizar_nota`)
 
-Quebrar um artefato (spec, plano, design) em tickets gera MUITAS notas de uma vez.
-Soltas em `Specs/` elas afogam o artefato que as originou — o problema real que esta
-regra resolve.
+- Concluiu o que a nota descreve (plano executado, bug corrigido) → `status=resolvido` na hora.
+- Doc substituída por outra → `sucessora=<nome da nova nota>` (fica `obsoleto`, link no topo).
+- `rascunho` → `status=ativo` quando aprovada.
 
-- Tickets NUNCA ficam soltos em `Specs/`. Vão para `Specs/Tickets - <nome do artefato>/`,
-  onde `<nome do artefato>` é o nome do arquivo da nota que os originou, SEM `.md`.
-- Uma pasta por artefato. Todos os tickets daquela quebra vão para a MESMA pasta;
-  outro artefato ganha a sua.
-- A pasta nasce junto com o primeiro ticket, nunca antes.
-- Vale para qualquer quebra em tickets/tarefas, inclusive a das skills externas
-  (`to-tickets` e afins): o destino é decidido aqui, não por elas.
+## Evolução (fechar leva/versão)
 
-Exemplo:
+Uma nota `tipo=evolucao` por leva e por projeto: o que mudou, por quê, tentativas que falharam,
+como foi verificado, pendências. Mesmo tema e arquivos da última evolução
+(`listar_notas projeto=X tipo=evolucao limite=1`) → `atualizar_nota` nela, não nota nova.
 
-```
-Specs/
-  2026-08-25 Indexacao da trilha de auditoria.md          ← o artefato
-  Tickets - 2026-08-25 Indexacao da trilha de auditoria/  ← a pasta dos tickets dele
-    2026-08-25 Ticket 01 Tracer da pipeline.md
-    2026-08-25 Ticket 02 Carga inicial.md
-```
+## Ler / achar
 
-Wikilink usa só o NOME da nota, então mover ticket para a pasta não quebra link nenhum —
-nem os do hub, nem os entre tickets.
+Hub: `ler_nota <projeto>`. Navegar: `conexoes` → `ler_nota`. Conteúdo: `buscar`. NUNCA
+carregar o vault inteiro no contexto: hub → nota certa, só o necessário.
 
-## Salvar artefato (resumo)
+## Mapa do Codigo (só se o projeto usa graphify)
 
-1. **Detectar projeto** — hub existente sempre ganha; nunca duplicar projeto.
-2. **Bootstrap** do hub e da pasta de tipo, se faltarem.
-3. **Classificar tipo** → pasta (spec/plano→`Specs`, adr→`Arquitetura`, bug→`Bugs`,
-   evolucao→`Evolucoes`, analise→`Analises`, mapa→raiz). **Ticket de um artefato →
-   `Specs/Tickets - <nome do artefato>/`** (ver regra acima).
-4. **Escrever** `YYYY-MM-DD <titulo>.md` com frontmatter obrigatório e wikilinks.
-5. **Atualizar o hub** e rodar o linter, se instalado (`$VAULT/.scripts/validar_vault.py`).
-6. **Commit → `pull --rebase` → push**, nessa ordem — só se o vault for repo git.
+Após cada rodada do graphify, sem o usuário pedir (e sob demanda): ler
+`graphify-out/GRAPH_REPORT.md` do repo e gravar `salvar_nota(tipo=mapa)` — domínios e
+comunidades, componentes-chave, conexões que valem saber, lacunas. CURADO, prosa + listas.
+PROIBIDO dump bruto, nota por arquivo de código, listar todo `.py`/`.ts`. `graphify-out/`
+nunca vai pro vault: fica local, no `.gitignore` e fora do index (`git ls-files graphify-out`
+vazio; se rastreado, `git rm -r --cached graphify-out`).
 
 ## Migração de docs existentes
 
-Só quando o usuário pedir, e é da skill irmã **`obsidian-docs-update`** (`/obsidian-docs-update`):
-varrer o projeto, inventariar, copiar, padronizar, indexar. Lá a migração é
-**cópia** — o repo do projeto nunca perde arquivo.
+Só quando o usuário pedir: skill irmã `obsidian-docs-update` (um projeto) ou
+`obsidian-docs-update-all` (workspace). Lá a migração é **cópia** — o repo nunca perde arquivo.
