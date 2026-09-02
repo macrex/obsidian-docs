@@ -16,11 +16,17 @@
    | tipo (frontmatter) | pasta |
    |---|---|
    | spec, plano | Specs |
+   | plano que é **ticket** de um artefato | `Specs/Tickets - <nome do artefato>/` |
    | arquitetura, adr | Arquitetura |
    | bug | Bugs |
    | evolucao | Evolucoes |
    | analise | Analises |
    | mapa | raiz do projeto (`Mapa do Codigo <projeto>.md`) |
+
+   Tickets NUNCA ficam soltos em `Specs/`: uma quebra gera muitas notas de uma vez e
+   afoga o artefato que as originou. `<nome do artefato>` é o nome do arquivo da nota
+   de origem, sem `.md`; a pasta nasce com o primeiro ticket. Regra completa no
+   `SKILL.md`.
 
 4. **Escrever a nota**: nome `YYYY-MM-DD <titulo>.md` (título pode ter acento; pastas não).
    Frontmatter obrigatório:

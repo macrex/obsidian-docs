@@ -33,6 +33,8 @@ Aguarde confirmação. O usuário pode excluir itens da lista.
 - Não existe → cria hub `<projeto>.md` (template da skill `obsidian-docs`), registra
   `[[<projeto>]]` no `Home.md`, e cria só as pastas de tipo que a migração precisa
   (`Specs`, `Arquitetura`, `Bugs`, `Evolucoes`, `Analises`).
+- Conjunto de tickets/tarefas derivados de um mesmo artefato → `Specs/Tickets - <nome do
+  artefato>/`, nunca solto em `Specs/` (regra na skill `obsidian-docs`).
 
 ## 4. Copiar + padronizar + indexar
 

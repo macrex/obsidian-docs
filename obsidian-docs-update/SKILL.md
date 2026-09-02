@@ -9,7 +9,7 @@ description: >
 
 # obsidian-docs-update — migração de docs do projeto pro vault
 
-# Versao: 4
+# Versao: 5
 
 `$VAULT`: resolva pela ordem da skill `obsidian-docs` — variável de ambiente `OBSIDIAN_VAULT`,
 senão o caminho declarado no `CLAUDE.md`, senão pergunte. Nunca invente. Vault é repo git

@@ -9,7 +9,7 @@ description: >
 
 # obsidian-docs — documentação de projetos no Obsidian
 
-# Versao: 5
+# Versao: 6
 
 ## `$VAULT` — resolver ANTES de qualquer leitura ou escrita
 
@@ -63,6 +63,7 @@ $VAULT/
     <projeto>.md                ← hub do projeto (nó central no graph)
     Mapa do Codigo <projeto>.md ← curada, gerada do graphify-out (opcional, pós-graphify)
     Specs/                      ← specs + planos + designs
+      Tickets - <artefato>/     ← os tickets derivados DAQUELE artefato (ver abaixo)
     Arquitetura/                ← ADRs, domínio, docs de arquitetura
     Bugs/
     Evolucoes/
@@ -72,12 +73,40 @@ $VAULT/
 - Nome do projeto = nome da pasta do repo git. Minúsculo, sem acento.
 - Pastas de tipo criadas SOB DEMANDA, só quando o primeiro artefato daquele tipo aparecer.
 
+## Tickets sempre em pasta própria (regra dura)
+
+Quebrar um artefato (spec, plano, design) em tickets gera MUITAS notas de uma vez.
+Soltas em `Specs/` elas afogam o artefato que as originou — o problema real que esta
+regra resolve.
+
+- Tickets NUNCA ficam soltos em `Specs/`. Vão para `Specs/Tickets - <nome do artefato>/`,
+  onde `<nome do artefato>` é o nome do arquivo da nota que os originou, SEM `.md`.
+- Uma pasta por artefato. Todos os tickets daquela quebra vão para a MESMA pasta;
+  outro artefato ganha a sua.
+- A pasta nasce junto com o primeiro ticket, nunca antes.
+- Vale para qualquer quebra em tickets/tarefas, inclusive a das skills externas
+  (`to-tickets` e afins): o destino é decidido aqui, não por elas.
+
+Exemplo:
+
+```
+Specs/
+  2026-08-25 Indexacao da trilha de auditoria.md          ← o artefato
+  Tickets - 2026-08-25 Indexacao da trilha de auditoria/  ← a pasta dos tickets dele
+    2026-08-25 Ticket 01 Tracer da pipeline.md
+    2026-08-25 Ticket 02 Carga inicial.md
+```
+
+Wikilink usa só o NOME da nota, então mover ticket para a pasta não quebra link nenhum —
+nem os do hub, nem os entre tickets.
+
 ## Salvar artefato (resumo)
 
 1. **Detectar projeto** — hub existente sempre ganha; nunca duplicar projeto.
 2. **Bootstrap** do hub e da pasta de tipo, se faltarem.
 3. **Classificar tipo** → pasta (spec/plano→`Specs`, adr→`Arquitetura`, bug→`Bugs`,
-   evolucao→`Evolucoes`, analise→`Analises`, mapa→raiz).
+   evolucao→`Evolucoes`, analise→`Analises`, mapa→raiz). **Ticket de um artefato →
+   `Specs/Tickets - <nome do artefato>/`** (ver regra acima).
 4. **Escrever** `YYYY-MM-DD <titulo>.md` com frontmatter obrigatório e wikilinks.
 5. **Atualizar o hub** e rodar o linter, se instalado (`$VAULT/.scripts/validar_vault.py`).
 6. **Commit → `pull --rebase` → push**, nessa ordem — só se o vault for repo git.
