@@ -631,6 +631,14 @@ def atualizar_nota(nota="", corpo=None, status=None, tags=None, sucessora=None, 
 # ---------- graphify (grafo de codigo do repo, via ponteiro Repo: do hub) ----------
 
 REPO_RE = re.compile(r"(?m)^Repo:\s*(.+?)\s*$")
+CAMINHO_RE = re.compile(r"[A-Za-z]:[\\/][^\s`*|]+|/[^\s`*|]+|~[^\s`*|]*")
+
+
+def caminho_da_linha(linha):
+    """Hub escrito a mao traz coisas como `Repo: **`D:\\x`** no master (Windows)`:
+    o caminho e so o primeiro trecho que parece caminho."""
+    m = CAMINHO_RE.search(linha)
+    return m.group(0).rstrip(".,;)") if m else linha.strip("`* ")
 TETO_SAIDA = 8000
 
 
@@ -663,14 +671,19 @@ def repo_do_projeto(projeto, repo=None):
         raise ErroUso(f'projeto "{projeto}" nao tem hub no vault (visao_geral lista os que existem)')
     texto = ler(hub)
     m = REPO_RE.search(texto)
+    atual = caminho_da_linha(m.group(1)) if m else None
     registrado = False
     if repo:
         repo = os.path.abspath(os.path.expanduser(str(repo)))
         if not m:
             escrever(hub, registrar_repo(texto, repo))
             registrado = True
+        elif os.path.normcase(atual) != os.path.normcase(repo):
+            # o repositorio mudou de pasta: so o caminho muda, o resto da linha fica
+            escrever(hub, texto.replace(m.group(0), m.group(0).replace(atual, repo, 1), 1))
+            registrado = True
     elif m:
-        repo = m.group(1)
+        repo = atual
     else:
         raise ErroUso(f"hub de {projeto} sem linha `Repo:`; passe repo=<caminho do repositorio>")
     if not os.path.isdir(repo):

@@ -168,6 +168,24 @@ if shutil.which("git"):
         g("add", "-A", cwd=repo)
         g("commit", "-q", "-m", "mais", cwd=repo)
         assert "atrasado 1 commit(s)" in sv.mapa_codigo(projeto="demo"), sv.mapa_codigo(projeto="demo")
+        # repo mudou de pasta: repo= atualiza o ponteiro do hub (e de volta)
+        repo2 = os.path.join(t2, "repo-movido")
+        shutil.copytree(repo, repo2)
+        assert "Repo registrada" in sv.mapa_codigo(projeto="demo", repo=repo2)
+        hub = arq("demo", "demo.md")
+        assert f"Repo: {repo2}" in hub and f"Repo: {repo}\n" not in hub, hub
+        sv.mapa_codigo(projeto="demo", repo=repo)
+        assert f"Repo: {repo}\n" in arq("demo", "demo.md")
+        # hub escrito a mao, com markdown e comentario na linha Repo:
+        hub_path = os.path.join(vault, "demo", "demo.md")
+        enfeitada = f"Repo: **`{repo}`** no master (Windows) e no main (Linux)"
+        sv.escrever(hub_path, sv.ler(hub_path).replace(f"Repo: {repo}", enfeitada, 1))
+        assert "6 nós" in sv.mapa_codigo(projeto="demo"), "caminho extraido da linha enfeitada"
+        sv.mapa_codigo(projeto="demo", repo=repo)          # igual: nao reescreve
+        assert enfeitada in arq("demo", "demo.md"), "linha preservada"
+        sv.mapa_codigo(projeto="demo", repo=repo2)          # diferente: troca so o caminho
+        assert f"Repo: **`{repo2}`** no master (Windows)" in arq("demo", "demo.md")
+        sv.mapa_codigo(projeto="demo", repo=repo)
 
         assert "exatamente um" in erro_de_uso(sv.consultar_codigo, projeto="demo")
         if shutil.which("graphify"):
