@@ -9,7 +9,7 @@ description: >
 
 # obsidian-docs — documentação de projetos no Obsidian
 
-# Versao: 11
+# Versao: 12
 
 Todo acesso ao vault é pelo MCP `vault-docs` (`mcp/servidor_vault.py` deste repo). Ele sabe
 onde o vault fica e aplica as convenções — pasta por tipo, nome com data, frontmatter, link e
@@ -17,25 +17,19 @@ entrada no hub, `Home.md`, commit → `pull --rebase` → push. Você decide **o
 e escreve o conteúdo; ele cuida do **como**. Estrutura: `Home.md` → `<projeto>/<projeto>.md`
 (hub) → pastas por tipo; toda nota linka o hub e está listada nele.
 
-**NUNCA** Read/Grep/Glob/Write/Edit direto nos arquivos do vault, nem `git` nele. Sem as
-ferramentas `mcp__vault-docs__*` na sessão → pare: registrar o servidor
-(`python <repo>/mcp/servidor_vault.py --instalar`, ver README) ou, se `claude mcp list` já o
-mostra, reiniciar o Claude Code — sessão aberta antes do registro não o carrega.
+**NUNCA** Read/Grep/Glob/Write/Edit direto nos arquivos do vault, nem `git` nele: as
+convenções vivem no servidor, e por fora dele nascem notas órfãs. Sem as ferramentas
+`mcp__vault-docs__*` na sessão: confira com `claude mcp list`; se faltar o registro, registre
+você mesmo com `python <repo>/mcp/servidor_vault.py --instalar`. Só o reinício do Claude Code
+é do usuário (sessão aberta antes do registro não carrega o servidor): faça tudo que não
+depende do vault, diga que a gravação ficou pendente do reinício e encerre o turno com isso claro.
 
-## Ferramentas
+## Quando usar cada ferramenta
 
-| Ferramenta | Uso |
-|---|---|
-| `visao_geral` | projetos existentes, contagem por tipo, notas recentes — primeiro passo quando não sabe o nome do projeto |
-| `buscar` | full-text sem acento/caixa; filtros `projeto`, `tipo`, `status` |
-| `listar_notas` | metadados, mais recentes primeiro (última evolução: `projeto=X tipo=evolucao limite=1`) |
-| `ler_nota` | conteúdo integral, por caminho ou nome de wikilink |
-| `conexoes` | wikilinks de saída e backlinks |
-| `salvar_nota` | nota nova — faz pasta, nome, frontmatter, link e entrada no hub, hub/Home novos, git |
-| `atualizar_nota` | nota existente — corpo, status, tags, resumo do hub ou sucessora (obsoleta), git |
-| `mapa_codigo` | mapa do código do projeto a partir do `graphify-out/` do repo (frescor, god nodes, as 20 maiores comunidades) — leia antes de mexer no código |
-| `consultar_codigo` | pergunta de arquitetura ao grafo: `pergunta`, `explicar=<nó>` ou `caminho=[A, B]` |
-| `gerar_mapa` | regrava `Mapa do Codigo <projeto>` do grafo, preservando `## Leitura curada` (ou recebendo `leitura`) |
+Não sabe o nome do projeto → `visao_geral`. Nota nova → `salvar_nota`; nota existente →
+`atualizar_nota`. Última evolução → `listar_notas projeto=X tipo=evolucao limite=1`. Código →
+`mapa_codigo` antes de mexer, `consultar_codigo` para arquitetura, `gerar_mapa` após o graphify.
+O que cada ferramenta faz e aceita está na descrição dela no próprio MCP.
 
 ## Regra dura
 
@@ -57,9 +51,12 @@ mostra, reiniciar o Claude Code — sessão aberta antes do registro não o carr
   `arquitetura`/`adr` → `Arquitetura/`; `analise` (pesquisa, estudo, relatório, review) →
   `Analises/`; `mapa` → `Mapa do Codigo <projeto>.md` na raiz do projeto (regrava).
 - `titulo`: curto, acento permitido. A nota vira `YYYY-MM-DD <titulo>.md` (hoje, ou `data`).
-- `corpo`: markdown. Vá direto ao conteúdo — o servidor põe `# titulo` e `Projeto: [[projeto]]`
-  se faltarem. Linke notas relacionadas por `[[nome da nota]]` (só o nome, nunca a pasta): spec
-  que originou o bug, evolução que resolveu, nota anterior. O grafo do Obsidian nasce daí.
+- `corpo`: markdown escrito para quem não viu esta sessão — frases completas, um parágrafo por
+  ideia, termos por extenso; sem cadeias de setas, abreviações inventadas ou rótulos que só
+  fazem sentido nesta conversa. Não repita o título nem o link do hub: o servidor põe
+  `# titulo` e `Projeto: [[projeto]]` se faltarem. Linke notas relacionadas por
+  `[[nome da nota]]` (só o nome, nunca a pasta): spec que originou o bug, evolução que
+  resolveu, nota anterior. O grafo do Obsidian nasce daí.
 - `resumo`: 1 linha — é a entrada da nota no hub.
 - `status`: `rascunho` (proposta) | `ativo` (padrão) | `resolvido` | `obsoleto`.
   `tags`: 1-3, kebab-case sem acento, opcional.
@@ -79,8 +76,8 @@ mostra, reiniciar o Claude Code — sessão aberta antes do registro não o carr
 
 ## Evolução (fechar leva/versão)
 
-Uma nota `tipo=evolucao` por leva e por projeto: o que mudou, por quê, tentativas que falharam,
-como foi verificado, pendências. Mesmo tema e arquivos da última evolução
+Uma nota `tipo=evolucao` por leva e por projeto, abrindo com uma frase do que a leva entregou;
+depois: o que mudou, por quê, tentativas que falharam, como foi verificado, pendências. Mesmo tema e arquivos da última evolução
 (`listar_notas projeto=X tipo=evolucao limite=1`) → `atualizar_nota` nela, não nota nova.
 
 ## Ler / achar: duas fontes, cada pergunta tem a sua
@@ -95,7 +92,8 @@ agora**. Vá primeiro na fonte da coluna da esquerda:
 | onde mexer num projeto que você não conhece | as duas | hub + última evolução + `mapa_codigo` |
 
 Sem grafo no projeto, as ferramentas de código dizem isso e o vault segue sozinho — graphify é
-opcional, nada depende dele. NUNCA carregar o vault inteiro no contexto.
+opcional, nada depende dele. Não carregue o vault inteiro no contexto — hub → nota certa, só o
+necessário: cada leitura entra no contexto de tudo que vem depois.
 
 ## Mapa do Codigo (só se o projeto usa graphify)
 
