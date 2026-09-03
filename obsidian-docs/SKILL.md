@@ -9,7 +9,7 @@ description: >
 
 # obsidian-docs — documentação de projetos no Obsidian
 
-# Versao: 10
+# Versao: 11
 
 Todo acesso ao vault é pelo MCP `vault-docs` (`mcp/servidor_vault.py` deste repo). Ele sabe
 onde o vault fica e aplica as convenções — pasta por tipo, nome com data, frontmatter, link e
@@ -33,7 +33,7 @@ mostra, reiniciar o Claude Code — sessão aberta antes do registro não o carr
 | `conexoes` | wikilinks de saída e backlinks |
 | `salvar_nota` | nota nova — faz pasta, nome, frontmatter, link e entrada no hub, hub/Home novos, git |
 | `atualizar_nota` | nota existente — corpo, status, tags, resumo do hub ou sucessora (obsoleta), git |
-| `mapa_codigo` | mapa do código do projeto a partir do `graphify-out/` do repo (frescor, comunidades, god nodes) — leia antes de mexer no código |
+| `mapa_codigo` | mapa do código do projeto a partir do `graphify-out/` do repo (frescor, god nodes, as 20 maiores comunidades) — leia antes de mexer no código |
 | `consultar_codigo` | pergunta de arquitetura ao grafo: `pergunta`, `explicar=<nó>` ou `caminho=[A, B]` |
 | `gerar_mapa` | regrava `Mapa do Codigo <projeto>` do grafo, preservando `## Leitura curada` (ou recebendo `leitura`) |
 

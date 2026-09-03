@@ -84,6 +84,12 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "status: obsoleto" in nota and "Substituída por [[2026-01-03 Ticket 01]]" in nota
     assert "sucessora nao existe" in erro_de_uso(sv.atualizar_nota, nota="2026-01-02 Login",
                                                  sucessora="Nada")
+    assert "propria nota" in erro_de_uso(sv.atualizar_nota, nota="2026-01-02 Login",
+                                         sucessora="Login")
+    # trocar de sucessora nao empilha linhas "Substituída por"
+    sv.atualizar_nota(nota="2026-01-02 Login", sucessora="Ticket 01")
+    nota = arq("demo", "Specs", "2026-01-02 Login.md")
+    assert nota.count("Substituída por") == 1 and "[[2026-01-03 Ticket 01]]" in nota, nota
 
     # corpo + status + resumo no hub
     r = sv.atualizar_nota(nota="demo/Specs/Tickets - 2026-01-02 Login/2026-01-03 Ticket 01.md",
@@ -204,6 +210,9 @@ if shutil.which("git"):
         assert "## Componentes tocados" in nota, nota
         assert "- API HTTP: main.py, rotas() (2 nós)" in nota and "- Banco: sessao() (1 nós)" in nota, nota
         assert "- sem nó no grafo: nao/existe.py" in nota and "Mapa: [[" not in nota, nota
+        # o mesmo arquivo em duas grafias nao conta o no duas vezes
+        secao, resumo = sv.componentes_tocados("demo", ["api/main.py", "./api/main.py"])
+        assert "Componentes: 2 nós em 1 comunidades" in resumo and "(2 nós)" in secao, (secao, resumo)
 
         r = sv.gerar_mapa(projeto="demo", leitura="Minha leitura.")
         assert "Salva: demo/Mapa do Codigo demo.md" in r, r
@@ -216,6 +225,22 @@ if shutil.which("git"):
         r = sv.salvar_nota(projeto="demo", tipo="bug", titulo="Falha", corpo="b", resumo="r",
                            arquivos=["api/auth.py"])
         assert "Mapa: [[Mapa do Codigo demo]]" in arq("demo", "Bugs", sv.hoje() + " Falha.md")
+        # corte de Componentes tocados: 6 comunidades x 5 rotulos, resto resumido
+        with open(os.path.join(repo, "graphify-out", "graph.json"), "w") as f:
+            _json.dump({"nodes": [{"id": f"c{c}n{i}", "label": f"c{c}n{i}", "source_file": f"c{c}.py",
+                                   "community": str(c)} for c in range(8) for i in range(7)],
+                        "links": [], "built_at_commit": head}, f)
+        secao, resumo = sv.componentes_tocados("demo", [f"c{c}.py" for c in range(8)])
+        assert "(+2) (7 nós)" in secao and "e mais 2 comunidades (14 nós)" in secao, secao
+        assert "Componentes: 56 nós em 8 comunidades" in resumo, resumo
+        # muitas comunidades: god nodes primeiro, 20 maiores e o resto resumido
+        _json.dump({"nodes": [{"id": f"n{i}", "label": f"n{i}", "source_file": f"m{i}.py",
+                               "community": str(i)} for i in range(25)],
+                    "links": [], "built_at_commit": head},
+                   open(os.path.join(repo, "graphify-out", "graph.json"), "w"))
+        m = sv.mapa_codigo(projeto="demo")
+        assert "e mais 5 comunidades menores (5 nós)" in m, m
+        assert m.index("God nodes") < m.index("Comunidades (25"), m
         # sem graphify-out: leitura avisa, gravacao nao trava
         shutil.rmtree(os.path.join(repo, "graphify-out"))
         assert "sem grafo em" in erro_de_uso(sv.mapa_codigo, projeto="demo")

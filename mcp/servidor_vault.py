@@ -90,7 +90,8 @@ def notas():
                 continue
             caminho = os.path.join(raiz, a)
             try:
-                texto = open(caminho, encoding="utf-8").read()
+                with open(caminho, encoding="utf-8") as f:
+                    texto = f.read()
                 mtime = os.path.getmtime(caminho)
             except (OSError, UnicodeDecodeError):
                 continue
@@ -356,6 +357,7 @@ STATUS = {"rascunho", "ativo", "resolvido", "obsoleto"}
 PASTAS = {"spec": "Specs", "plano": "Specs", "bug": "Bugs", "evolucao": "Evolucoes",
           "arquitetura": "Arquitetura", "adr": "Arquitetura", "analise": "Analises"}
 NOME_PROIBIDO_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+SUBSTITUIDA_RE = re.compile(r"^Substituída por \[\[[^\]]*\]\]\.\n+")
 PREFIXO_DATA_RE = re.compile(r"^\d{4}-\d{2}-\d{2} ")
 
 
@@ -373,7 +375,8 @@ def nome_de_nota(ref):
 
 
 def ler(caminho):
-    return open(caminho, encoding="utf-8").read().replace("\r\n", "\n")
+    with open(caminho, encoding="utf-8") as f:
+        return f.read().replace("\r\n", "\n")
 
 
 def escrever(caminho, texto):
@@ -593,9 +596,17 @@ def atualizar_nota(nota="", corpo=None, status=None, tags=None, sucessora=None, 
         resto = "\n" + com_cabecalho(corpo, PREFIXO_DATA_RE.sub("", alvo["nome"]), projeto) + "\n"
         mudou.append("corpo")
     if sucessora:
-        nome_suc = nome_de_nota(sucessora)
-        if not any(n["nome"] == nome_suc for n in todas):
-            raise ErroUso(f"sucessora nao existe no vault: {nome_suc}. Crie-a antes (salvar_nota).")
+        alvo_suc, cands_suc = achar(sucessora, todas)   # mesma resolucao da nota-alvo
+        if not alvo_suc and cands_suc:
+            raise ErroUso(f'mais de uma nota bate com a sucessora "{sucessora}" — repita com o '
+                          "caminho: " + "; ".join(n["rel"] for n in cands_suc[:5]))
+        if not alvo_suc:
+            raise ErroUso(f"sucessora nao existe no vault: {sucessora}. Crie-a antes (salvar_nota).")
+        if alvo_suc["rel"] == alvo["rel"]:
+            raise ErroUso(f"sucessora e a propria nota ({alvo['rel']}); passe a nota que a substitui")
+        nome_suc = alvo_suc["nome"]
+        # uma sucessora por vez: a linha anterior sai, a nova entra no topo do corpo
+        resto = SUBSTITUIDA_RE.sub("", resto.lstrip("\n"), count=1)
         resto = f"\nSubstituída por [[{nome_suc}]].\n" + resto.lstrip("\n")
         status = status or "obsoleto"
         mudou.append(f"sucessora=[[{nome_suc}]]")
@@ -722,7 +733,8 @@ def frescor(repo, g):
 def rotulos_comunidades(pasta):
     p = os.path.join(pasta, ".graphify_labels.json")
     try:
-        d = json.load(open(p, encoding="utf-8"))
+        with open(p, encoding="utf-8") as f:
+            d = json.load(f)
     except (OSError, ValueError):
         return {}
     if isinstance(d, dict) and isinstance(d.get("labels"), dict):
@@ -771,30 +783,40 @@ def secoes_do_report(pasta):
     return "\n".join(saida)
 
 
-def resumo_grafo(g, pasta):
-    """(linhas de comunidades, linhas de god nodes, texto do report, n nos, n arestas)."""
+def resumo_grafo(g, pasta, max_comunidades=20):
+    """(linhas das maiores comunidades, linhas de god nodes, texto do report,
+    n nos, n arestas, n comunidades). Projeto grande tem centenas de comunidades:
+    listar todas estourava o teto da saida antes dos god nodes."""
     nos, grau, comunidades, god, n_arestas = analisar_grafo(g, pasta)
 
     def rot(i):
         return str(nos[i].get("label") or i)
 
+    mostradas = comunidades if max_comunidades is None else comunidades[:max_comunidades]
+    resto = [] if max_comunidades is None else comunidades[max_comunidades:]
     com = [f"- {nome} — {len(ids)} nós: " + ", ".join(rot(i) for i in ids[:3])
-           for nome, ids in comunidades]
+           for nome, ids in mostradas]
+    if resto:
+        com.append(f"- … e mais {len(resto)} comunidades menores "
+                   f"({sum(len(ids) for _, ids in resto)} nós)")
     gods = [f"- {rot(i)} ({nos[i].get('source_file', '?')}) — grau {grau[i]}" for i in god]
-    return com, gods, secoes_do_report(pasta), len(nos), n_arestas
+    return com, gods, secoes_do_report(pasta), len(nos), n_arestas, len(comunidades)
 
 
 def mapa_codigo(projeto="", repo=None):
     repo, registrado, g, pasta = grafo_do_projeto(projeto, repo)
-    com, gods, rep, n_nos, n_arestas = resumo_grafo(g, pasta)
+    com, gods, rep, n_nos, n_arestas, n_com = resumo_grafo(g, pasta)
     linhas = [f"Grafo: {os.path.join(pasta, 'graph.json')} — {n_nos} nós, {n_arestas} arestas",
-              frescor(repo, g), f"Comunidades ({len(com)}):"] + com + ["God nodes (10 por grau):"] + gods
+              frescor(repo, g), "God nodes (10 por grau):"] + gods + \
+             [f"Comunidades ({n_com}, as maiores primeiro):"] + com
     if rep:
         linhas += ["Do GRAPH_REPORT.md:", rep]
-    if registrado:
-        linhas.append("Hub: linha Repo registrada. Git: "
-                      + sincronizar(f"{projeto}: Repo registrado no hub"))
-    return "\n".join(linhas)[:TETO_SAIDA]
+    saida = "\n".join(linhas)
+    if len(saida) > TETO_SAIDA:
+        saida = saida[:TETO_SAIDA] + f"\n… (saída cortada em {TETO_SAIDA} caracteres)"
+    if registrado:  # depois do corte: o aviso de que o hub mudou nunca some
+        saida += "\nHub: linha Repo registrada. Git: " + sincronizar(f"{projeto}: Repo registrado no hub")
+    return saida
 
 
 def componentes_tocados(projeto, arquivos, repo=None):
@@ -803,7 +825,7 @@ def componentes_tocados(projeto, arquivos, repo=None):
     nos, grau, comunidades, _, _ = analisar_grafo(g, pasta)
     rotulo_de = {i: nome for nome, ids in comunidades for i in ids}
     raiz = repo.replace("\\", "/").rstrip("/") + "/"
-    achados, sem_no, total = defaultdict(list), [], 0
+    achados, sem_no, vistos = defaultdict(list), [], set()
     for arq in arquivos:
         a = str(arq).replace("\\", "/").strip()
         if a.startswith("./"):
@@ -818,13 +840,21 @@ def componentes_tocados(projeto, arquivos, repo=None):
         if not ids:
             sem_no.append(a)
             continue
+        # o mesmo arquivo pode vir duas vezes (a.py e ./a.py): cada no conta uma vez
         for i in sorted(ids, key=lambda i: -grau[i]):
-            achados[rotulo_de.get(i, "?")].append(str(nos[i].get("label") or i))
-        total += len(ids)
+            if i not in vistos:
+                vistos.add(i)
+                achados[rotulo_de.get(i, "?")].append(str(nos[i].get("label") or i))
+    total = len(vistos)
+    # a secao e relida em toda leitura da nota: 6 comunidades, 5 rotulos cada
+    ordenadas = sorted(achados.items(), key=lambda kv: -len(kv[1]))
     linhas = ["## Componentes tocados", ""]
-    for nome, labels in sorted(achados.items(), key=lambda kv: -len(kv[1])):
-        extra = f" (+{len(labels) - 8})" if len(labels) > 8 else ""
-        linhas.append(f"- {nome}: " + ", ".join(labels[:8]) + extra + f" ({len(labels)} nós)")
+    for nome, labels in ordenadas[:6]:
+        extra = f" (+{len(labels) - 5})" if len(labels) > 5 else ""
+        linhas.append(f"- {nome}: " + ", ".join(labels[:5]) + extra + f" ({len(labels)} nós)")
+    if len(ordenadas) > 6:
+        linhas.append(f"- … e mais {len(ordenadas) - 6} comunidades "
+                      f"({sum(len(l) for _, l in ordenadas[6:])} nós)")
     if sem_no:
         linhas.append("- sem nó no grafo: " + ", ".join(sem_no))
     if os.path.exists(os.path.join(VAULT, projeto, f"Mapa do Codigo {projeto}.md")):
@@ -844,12 +874,12 @@ def gerar_mapa(projeto="", leitura=None, repo=None):
         m = LEITURA_RE.search(ler(existente))
         leitura = m.group(1) if m else None
     leitura = (leitura or "").strip() or "(ainda sem leitura curada — passe leitura em gerar_mapa)"
-    com, gods, rep, _, _ = resumo_grafo(g, pasta)
+    com, gods, rep, _, _, n_com = resumo_grafo(g, pasta, max_comunidades=None)  # a nota e o indice: completa
     commit = str(g.get("built_at_commit") or "")[:7] or "?"
     corpo = [f"# {nome}", "",
              f"Projeto: [[{projeto}]]. Gerado do graphify-out em {hoje()} (commit {commit}).", "",
-             "## Leitura curada", "", leitura, "", "## Comunidades", ""] + com + \
-            ["", "## God nodes", ""] + gods
+             "## Leitura curada", "", leitura, "", "## God nodes", ""] + gods + \
+            ["", f"## Comunidades ({n_com})", ""] + com
     if rep:
         corpo += ["", "## Conexões e perguntas (GRAPH_REPORT)", "", rep]
     return salvar_nota(projeto=projeto, tipo="mapa", titulo=nome, corpo="\n".join(corpo), repo=repo)
@@ -1008,8 +1038,8 @@ FERRAMENTAS = [
      "fn": atualizar_nota},
     {"name": "mapa_codigo",
      "description": "Mapa do codigo do projeto a partir do graphify-out do repo (ponteiro "
-                    "Repo: do hub): frescor do grafo, comunidades, god nodes e destaques do "
-                    "GRAPH_REPORT. Leia antes de mexer no codigo.",
+                    "Repo: do hub): frescor do grafo, god nodes, as 20 maiores comunidades e "
+                    "destaques do GRAPH_REPORT. Leia antes de mexer no codigo.",
      "inputSchema": esquema({"projeto": P_PROJ, "repo": P_REPO}, "projeto"),
      "fn": mapa_codigo},
     {"name": "consultar_codigo",
@@ -1026,7 +1056,7 @@ FERRAMENTAS = [
      "fn": consultar_codigo},
     {"name": "gerar_mapa",
      "description": "Regrava a nota `Mapa do Codigo <projeto>` a partir do graphify-out "
-                    "(comunidades, god nodes, GRAPH_REPORT) preservando a secao Leitura "
+                    "(god nodes, todas as comunidades, GRAPH_REPORT) preservando a secao Leitura "
                     "curada; passe `leitura` para atualiza-la. Chame apos cada rodada do graphify.",
      "inputSchema": esquema({
          "projeto": P_PROJ,

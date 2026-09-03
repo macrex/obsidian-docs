@@ -65,21 +65,46 @@ scope — it works in every project of yours — and can be repeated safely. If 
 | `gerar_mapa` | Rewrites the `Mapa do Codigo <project>` note from the graph, keeping your curated reading. |
 
 Self-test, in a temporary vault: `python ~/repos/obsidian-docs/mcp/teste_servidor_vault.py`.
+End-to-end sandbox test (git vault with a remote and a second concurrent clone, a real repo
+indexed by graphify, the server speaking MCP over stdin, linter at the end):
+`python ~/repos/obsidian-docs/mcp/teste_sandbox.py`. Neither touches your vault.
 
-## graphify (optional)
+## graphify (optional): the code graph as a second source
 
-If the project uses [graphify](https://github.com/Graphify-Labs/graphify) (`pip install graphifyy`,
-free, runs locally), the vault starts to see the code: `mapa_codigo` before touching the project,
-`consultar_codigo` for architecture, `gerar_mapa` after each run, and `salvar_nota` with
-`arquivos=[…]` appending a "Componentes tocados" section to the note.
+[graphify](https://github.com/Graphify-Labs/graphify) (`pip install graphifyy`, free, runs
+locally, no key needed for code) turns a repository into a graph — nodes are files, functions and
+classes; edges are "calls" and "contains" — written to `graphify-out/graph.json`. The server
+reads that file and nothing else: no API calls, no graphify process required, and only
+`consultar_codigo` uses the CLI.
 
-The graph stays where graphify writes it, in `<repo>/graphify-out/` — add that folder to the
-project's `.gitignore`. The hub keeps `Repo: <repo path>` (the server records it on the first
-call with `repo=`) and reads `graph.json` from there. **Never inside the vault**: the vault is a
-git repository and the server commits and pushes on every note.
+**Wiring a project, in three steps:**
 
-With no graph, the three code tools say so and the rest of the skill works the same — graphify
-is optional and nothing in the vault depends on it.
+1. Build the graph inside the repository: `graphify update .` (or the `graphify-ai` facilitator
+   skill, which also installs the git hook that rebuilds the graph on every commit). Add
+   `graphify-out/` to the project's `.gitignore` — besides the graph, graphify writes `cache/`
+   and `manifest.json` there, and on a large project that passes 50 MB.
+2. Point the project's hub in the vault at the repository: the `Repo: <path>` line in
+   `<project>/<project>.md`. No hand editing needed — the first call with `repo=` writes the line,
+   and a call with a different `repo=` updates it when the repository moves. A hand-written hub
+   with decorations (`Repo: **\`D:\x\`** on master`) works too: only the path counts.
+3. Done. With no graph, the code tools answer "sem grafo em <folder>" and the rest of the
+   server works unchanged — nothing in the vault depends on graphify.
+
+| Tool | What it does with the graph |
+|---|---|
+| `mapa_codigo <project>` | Freshness (compares `built_at_commit` with the repo's `HEAD`: "atualizado" or "atrasado N commits"), ten god nodes by degree, the 20 largest communities with their `.graphify_labels.json` label, and the highlights of `GRAPH_REPORT.md`. Read it before touching a project. |
+| `consultar_codigo <project>` | One question at a time to the CLI: a free `pergunta` (`graphify query`), `explicar` a node, or `caminho=[A, B]` (shortest path). |
+| `gerar_mapa <project>` | Rewrites the `Mapa do Codigo <project>` note with god nodes, communities and highlights, preserving the `## Leitura curada` section — pass `leitura` to update it. Call it after every graphify run. |
+| `salvar_nota … arquivos=[…]` | Matches each path to graph nodes and appends `## Componentes tocados` to the note (the six communities with most touched nodes, five labels each), linking the Mapa. Files without a node are listed; a missing graph only yields a warning. |
+
+**Two sources, one question each.** The vault knows what was decided and written; the graph
+knows what the code is now. Why it is this way and what was already ruled out → vault
+(`ler_nota`, `buscar`). Who calls X, path from A to B, which file is the bottleneck → graph
+(`consultar_codigo`, `mapa_codigo`). A project you don't know → hub + latest evolution +
+`mapa_codigo`.
+
+**Never inside the vault.** The vault is a git repository and the server commits and pushes on
+every note; a `graph.json` there would reach the remote by itself, on every rebuild.
 
 ## CLAUDE.md
 

@@ -62,21 +62,45 @@ variável `OBSIDIAN_VAULT`, `--vault` é opcional. Vault que é repositório git
 | `gerar_mapa` | Regrava a nota `Mapa do Codigo <projeto>` do grafo, preservando sua leitura curada. |
 
 Autoteste, num vault temporário: `python ~/repos/obsidian-docs/mcp/teste_servidor_vault.py`.
+Teste de ponta a ponta em sandbox (vault git com remoto e um segundo clone concorrente, repo
+real indexado pelo graphify, servidor falando o protocolo MCP por stdin, linter no fim):
+`python ~/repos/obsidian-docs/mcp/teste_sandbox.py`. Nenhum dos dois toca o seu vault.
 
-## graphify (opcional)
+## graphify (opcional): o grafo do código como segunda fonte
 
-Se o projeto usa o [graphify](https://github.com/Graphify-Labs/graphify) (`pip install graphifyy`,
-grátis, roda local), o vault passa a enxergar o código: `mapa_codigo` antes de mexer no projeto,
-`consultar_codigo` para arquitetura, `gerar_mapa` depois de cada rodada, e `salvar_nota` com
-`arquivos=[…]` anexando "Componentes tocados" à nota.
+O [graphify](https://github.com/Graphify-Labs/graphify) (`pip install graphifyy`, grátis, roda
+local, sem chave para código) transforma um repositório num grafo — nós são arquivos, funções e
+classes; arestas são "chama" e "contém" — gravado em `graphify-out/graph.json`. O servidor lê
+esse arquivo e nada mais: não chama API, não precisa do graphify rodando, e só `consultar_codigo`
+usa o CLI.
 
-O grafo fica onde o graphify o gera, em `<repo>/graphify-out/` — ponha essa pasta no
-`.gitignore` do projeto. O hub guarda `Repo: <caminho do repo>` (o servidor registra sozinho na
-primeira chamada com `repo=`) e lê o `graph.json` de lá. **Nunca no vault**: o vault é um
-repositório git e o servidor commita e empurra a cada nota.
+**Ligar um projeto, em três passos:**
 
-Sem grafo, as três ferramentas de código dizem isso e o resto da skill segue igual — o graphify
-é opcional e nada no vault depende dele.
+1. Gerar o grafo dentro do repositório: `graphify update .` (ou a skill facilitadora
+   `graphify-ai`, que também instala o git hook que refaz o grafo a cada commit). Ponha
+   `graphify-out/` no `.gitignore` do projeto — além do grafo, o graphify grava ali `cache/` e
+   `manifest.json`, e em projeto grande isso passa de 50 MB.
+2. Apontar o hub do projeto no vault para o repositório: a linha `Repo: <caminho>` em
+   `<projeto>/<projeto>.md`. Não precisa editar à mão — a primeira chamada com `repo=` grava a
+   linha, e uma chamada com outro `repo=` a atualiza quando o repositório muda de pasta. Hub
+   escrito à mão com enfeites (`Repo: **\`D:\x\`** no master`) também funciona: só o caminho conta.
+3. Pronto. Sem grafo, as ferramentas de código respondem "sem grafo em <pasta>" e o resto do
+   servidor segue igual — nada no vault depende do graphify.
+
+| Ferramenta | O que faz com o grafo |
+|---|---|
+| `mapa_codigo <projeto>` | Frescor (compara `built_at_commit` com o `HEAD` do repo: "atualizado" ou "atrasado N commits"), dez god nodes por grau, as 20 maiores comunidades com o rótulo de `.graphify_labels.json`, e os destaques do `GRAPH_REPORT.md`. Leia antes de mexer num projeto. |
+| `consultar_codigo <projeto>` | Uma pergunta por vez ao CLI: `pergunta` livre (`graphify query`), `explicar` um nó ou `caminho=[A, B]` (caminho mais curto). |
+| `gerar_mapa <projeto>` | Regrava a nota `Mapa do Codigo <projeto>` com god nodes, comunidades e destaques, preservando a seção `## Leitura curada` — passe `leitura` para atualizá-la. Chame após cada rodada do graphify. |
+| `salvar_nota … arquivos=[…]` | Casa cada caminho com os nós do grafo e anexa `## Componentes tocados` à nota (seis comunidades com mais nós tocados, cinco rótulos cada), com link ao Mapa. Arquivo sem nó é listado; grafo ausente só gera um aviso. |
+
+**Duas fontes, cada pergunta na sua.** O vault sabe o que foi decidido e escrito; o grafo sabe o
+que o código é agora. Por que é assim e o que já foi descartado → vault (`ler_nota`, `buscar`).
+Quem chama X, caminho de A a B, qual arquivo é gargalo → grafo (`consultar_codigo`,
+`mapa_codigo`). Projeto que você não conhece → hub + última evolução + `mapa_codigo`.
+
+**Nunca dentro do vault.** O vault é um repositório git e o servidor commita e empurra a cada
+nota; um `graph.json` ali iria para o remoto sozinho, a cada rebuild.
 
 ## CLAUDE.md
 
