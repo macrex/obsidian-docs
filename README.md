@@ -57,8 +57,26 @@ variável `OBSIDIAN_VAULT`, `--vault` é opcional. Vault que é repositório git
 | `conexoes` | Wikilinks de saída e backlinks — navegação pelo grafo. |
 | `salvar_nota` | Nota nova: pasta por tipo, `YYYY-MM-DD titulo.md`, frontmatter, link e entrada no hub, hub/`Home.md` se o projeto for novo, commit+push. Tickets em `Specs/Tickets - <artefato>/`. |
 | `atualizar_nota` | Nota existente: corpo, status, tags, resumo no hub ou sucessora (marca obsoleta e linka). |
+| `mapa_codigo` | Mapa do código do projeto lendo o `graphify-out/`: frescor do grafo, comunidades, god nodes. |
+| `consultar_codigo` | Pergunta de arquitetura ao grafo (`graphify query/explain/path`), CLI local. |
+| `gerar_mapa` | Regrava a nota `Mapa do Codigo <projeto>` do grafo, preservando sua leitura curada. |
 
 Autoteste, num vault temporário: `python ~/repos/obsidian-docs/mcp/teste_servidor_vault.py`.
+
+## graphify (opcional)
+
+Se o projeto usa o [graphify](https://github.com/Graphify-Labs/graphify) (`pip install graphifyy`,
+grátis, roda local), o vault passa a enxergar o código: `mapa_codigo` antes de mexer no projeto,
+`consultar_codigo` para arquitetura, `gerar_mapa` depois de cada rodada, e `salvar_nota` com
+`arquivos=[…]` anexando "Componentes tocados" à nota.
+
+O grafo fica onde o graphify o gera, em `<repo>/graphify-out/` — ponha essa pasta no
+`.gitignore` do projeto. O hub guarda `Repo: <caminho do repo>` (o servidor registra sozinho na
+primeira chamada com `repo=`) e lê o `graph.json` de lá. **Nunca no vault**: o vault é um
+repositório git e o servidor commita e empurra a cada nota.
+
+Sem grafo, as três ferramentas de código dizem isso e o resto da skill segue igual — o graphify
+é opcional e nada no vault depende dele.
 
 ## CLAUDE.md
 
@@ -87,8 +105,9 @@ Opcionais, na ordem do que mais muda o resultado:
 - Migrar docs pro vault em lote: `obsidian-docs-update` (um projeto) ou
   `obsidian-docs-update-all` (workspace inteiro).
 - Specs/planos de brainstorming (superpowers) também vão pro vault.
-- Rodou o graphify → `salvar_nota tipo=mapa` (`Mapa do Codigo <projeto>`). `graphify-out/`
-  fica local e no `.gitignore`, nunca no vault.
+- Rodou o graphify → `gerar_mapa <projeto>` com a sua `leitura`. `graphify-out/` fica no repo e
+  no `.gitignore`, nunca no vault. Antes de mexer no código, `mapa_codigo <projeto>` junto com
+  o hub; pergunta de estrutura vai no grafo (`consultar_codigo`), pergunta de decisão vai no vault.
 - Projeto mencionado que não está no cwd → resolver antes de agir: `ler_nota <projeto>`; nome
   incerto → `buscar <nome>` ou `visao_geral`.
 ```

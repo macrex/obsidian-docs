@@ -60,8 +60,26 @@ scope — it works in every project of yours — and can be repeated safely. If 
 | `conexoes` | Outgoing wikilinks and backlinks — graph navigation. |
 | `salvar_nota` | New note: folder by type, `YYYY-MM-DD title.md`, frontmatter, hub link and hub entry, hub/`Home.md` when the project is new, commit+push. Tickets go to `Specs/Tickets - <artefato>/`. |
 | `atualizar_nota` | Existing note: body, status, tags, hub summary, or successor (marks obsolete and links it). |
+| `mapa_codigo` | Code map of the project read from `graphify-out/`: graph freshness, communities, god nodes. |
+| `consultar_codigo` | Architecture question to the graph (`graphify query/explain/path`), local CLI. |
+| `gerar_mapa` | Rewrites the `Mapa do Codigo <project>` note from the graph, keeping your curated reading. |
 
 Self-test, in a temporary vault: `python ~/repos/obsidian-docs/mcp/teste_servidor_vault.py`.
+
+## graphify (optional)
+
+If the project uses [graphify](https://github.com/Graphify-Labs/graphify) (`pip install graphifyy`,
+free, runs locally), the vault starts to see the code: `mapa_codigo` before touching the project,
+`consultar_codigo` for architecture, `gerar_mapa` after each run, and `salvar_nota` with
+`arquivos=[…]` appending a "Componentes tocados" section to the note.
+
+The graph stays where graphify writes it, in `<repo>/graphify-out/` — add that folder to the
+project's `.gitignore`. The hub keeps `Repo: <repo path>` (the server records it on the first
+call with `repo=`) and reads `graph.json` from there. **Never inside the vault**: the vault is a
+git repository and the server commits and pushes on every note.
+
+With no graph, the three code tools say so and the rest of the skill works the same — graphify
+is optional and nothing in the vault depends on it.
 
 ## CLAUDE.md
 
@@ -91,8 +109,10 @@ Optional, ordered by how much they change the outcome:
 - Bulk-migrating docs to the vault: `obsidian-docs-update` (one project) or
   `obsidian-docs-update-all` (whole workspace).
 - Brainstorming specs/plans (superpowers) also go to the vault.
-- After running graphify → `salvar_nota tipo=mapa` (`Mapa do Codigo <project>`).
-  `graphify-out/` stays local and in `.gitignore`, never in the vault.
+- After running graphify → `gerar_mapa <project>` with your `leitura`. `graphify-out/` stays in
+  the repo and in `.gitignore`, never in the vault. Before touching code, `mapa_codigo <project>`
+  alongside the hub; structure questions go to the graph (`consultar_codigo`), decision
+  questions to the vault.
 - A project mentioned that isn't in the cwd → resolve it before acting: `ler_nota <project>`;
   unsure of the name → `buscar <name>` or `visao_geral`.
 ```

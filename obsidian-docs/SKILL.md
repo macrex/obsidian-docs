@@ -9,7 +9,7 @@ description: >
 
 # obsidian-docs — documentação de projetos no Obsidian
 
-# Versao: 9
+# Versao: 10
 
 Todo acesso ao vault é pelo MCP `vault-docs` (`mcp/servidor_vault.py` deste repo). Ele sabe
 onde o vault fica e aplica as convenções — pasta por tipo, nome com data, frontmatter, link e
@@ -33,6 +33,9 @@ mostra, reiniciar o Claude Code — sessão aberta antes do registro não o carr
 | `conexoes` | wikilinks de saída e backlinks |
 | `salvar_nota` | nota nova — faz pasta, nome, frontmatter, link e entrada no hub, hub/Home novos, git |
 | `atualizar_nota` | nota existente — corpo, status, tags, resumo do hub ou sucessora (obsoleta), git |
+| `mapa_codigo` | mapa do código do projeto a partir do `graphify-out/` do repo (frescor, comunidades, god nodes) — leia antes de mexer no código |
+| `consultar_codigo` | pergunta de arquitetura ao grafo: `pergunta`, `explicar=<nó>` ou `caminho=[A, B]` |
+| `gerar_mapa` | regrava `Mapa do Codigo <projeto>` do grafo, preservando `## Leitura curada` (ou recebendo `leitura`) |
 
 ## Regra dura
 
@@ -60,6 +63,9 @@ mostra, reiniciar o Claude Code — sessão aberta antes do registro não o carr
 - `resumo`: 1 linha — é a entrada da nota no hub.
 - `status`: `rascunho` (proposta) | `ativo` (padrão) | `resolvido` | `obsoleto`.
   `tags`: 1-3, kebab-case sem acento, opcional.
+- `arquivos`: caminhos tocados pela leva (`git diff --name-only`), relativos ao repo. O servidor
+  anexa `## Componentes tocados` (nós por comunidade, link ao Mapa) a partir do grafo do
+  graphify. Passe sempre em evolução, bug e spec de mudança.
 - **Ticket** de um artefato (quebra de spec/plano em tarefas, inclusive por skills externas como
   `to-tickets`): `tipo=plano` + `artefato=<nome da nota de origem>`. Vai para
   `Specs/Tickets - <artefato>/`, nunca solto em `Specs/` — muitas notas de uma vez afogam o
@@ -77,19 +83,30 @@ Uma nota `tipo=evolucao` por leva e por projeto: o que mudou, por quê, tentativ
 como foi verificado, pendências. Mesmo tema e arquivos da última evolução
 (`listar_notas projeto=X tipo=evolucao limite=1`) → `atualizar_nota` nela, não nota nova.
 
-## Ler / achar
+## Ler / achar: duas fontes, cada pergunta tem a sua
 
-Hub: `ler_nota <projeto>`. Navegar: `conexoes` → `ler_nota`. Conteúdo: `buscar`. NUNCA
-carregar o vault inteiro no contexto: hub → nota certa, só o necessário.
+O vault sabe o que foi **decidido e escrito**; o grafo do graphify sabe o que o código **é
+agora**. Vá primeiro na fonte da coluna da esquerda:
+
+| A pergunta é sobre | Fonte primária | Como |
+|---|---|---|
+| por que é assim, o que já foi descartado, o que a leva mudou | vault | `ler_nota`, `buscar`, `listar_notas`, `conexoes` |
+| estrutura do código: quem chama X, caminho de A a B, o que é gargalo | grafo | `consultar_codigo`, `mapa_codigo` |
+| onde mexer num projeto que você não conhece | as duas | hub + última evolução + `mapa_codigo` |
+
+Sem grafo no projeto, as ferramentas de código dizem isso e o vault segue sozinho — graphify é
+opcional, nada depende dele. NUNCA carregar o vault inteiro no contexto.
 
 ## Mapa do Codigo (só se o projeto usa graphify)
 
-Após cada rodada do graphify, sem o usuário pedir (e sob demanda): ler
-`graphify-out/GRAPH_REPORT.md` do repo e gravar `salvar_nota(tipo=mapa)` — domínios e
-comunidades, componentes-chave, conexões que valem saber, lacunas. CURADO, prosa + listas.
-PROIBIDO dump bruto, nota por arquivo de código, listar todo `.py`/`.ts`. `graphify-out/`
-nunca vai pro vault: fica local, no `.gitignore` e fora do index (`git ls-files graphify-out`
-vazio; se rastreado, `git rm -r --cached graphify-out`).
+`graphify-out/` fica no repo, no `.gitignore` e fora do index (`git ls-files graphify-out`
+vazio; se rastreado, `git rm -r --cached graphify-out`) — nunca no vault. O servidor chega nele
+pela linha `Repo:` do hub; hub sem ela → passe `repo=` uma vez e o servidor registra.
+
+Após cada rodada do graphify, sem o usuário pedir (e sob demanda):
+`gerar_mapa(projeto, leitura=<sua prosa>)`. O servidor põe comunidades, god nodes e destaques
+do GRAPH_REPORT; a `leitura` é a parte curada — domínios, o que vale saber, lacunas — e é
+preservada quando você não a passa. Continua PROIBIDO: dump bruto, nota por arquivo de código.
 
 ## Migração de docs existentes
 

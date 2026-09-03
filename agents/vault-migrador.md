@@ -1,7 +1,7 @@
 ---
 name: vault-migrador
 description: Migra a documentação de UM projeto para o vault Obsidian seguindo as regras da skill obsidian-docs-update. Dois modos - inventário (só lista, read-only) e migração (copia via MCP vault-docs, que padroniza, indexa e commita o vault). Devolve só o resumo compacto; a varredura bruta fica fora do contexto principal.
-tools: Bash, Read, Write, Edit, Glob, Grep, mcp__vault-docs__visao_geral, mcp__vault-docs__buscar, mcp__vault-docs__listar_notas, mcp__vault-docs__ler_nota, mcp__vault-docs__conexoes, mcp__vault-docs__salvar_nota, mcp__vault-docs__atualizar_nota
+tools: Bash, Read, Write, Edit, Glob, Grep, mcp__vault-docs__visao_geral, mcp__vault-docs__buscar, mcp__vault-docs__listar_notas, mcp__vault-docs__ler_nota, mcp__vault-docs__conexoes, mcp__vault-docs__salvar_nota, mcp__vault-docs__atualizar_nota, mcp__vault-docs__mapa_codigo, mcp__vault-docs__consultar_codigo, mcp__vault-docs__gerar_mapa
 model: sonnet
 skills: obsidian-docs-update
 ---

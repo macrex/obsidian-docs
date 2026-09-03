@@ -121,7 +121,96 @@ if shutil.which("git"):
         assert "demo: X" in g("log", "--oneline", "-1", cwd=bare).stdout
         sv.SEM_GIT = True
         assert "sem git" in sv.atualizar_nota(nota=sv.hoje() + " X", status="resolvido")
+
+        # ---- graphify: repo sintetico com graphify-out ----
+        import json as _json
+        repo = os.path.join(t2, "repo")
+        os.makedirs(os.path.join(repo, "graphify-out"))
+        g("init", "-q", repo, cwd=t2)
+        g("config", "user.email", "t@t", cwd=repo)
+        g("config", "user.name", "t", cwd=repo)
+        open(os.path.join(repo, "a.py"), "w").write("x = 1\n")
+        g("add", "-A", cwd=repo)
+        g("commit", "-q", "-m", "init", cwd=repo)
+        head = g("rev-parse", "HEAD", cwd=repo).stdout.strip()
+
+        def grava_grafo(commit):
+            _json.dump({"directed": True, "nodes": [
+                {"id": "api_main", "label": "main.py", "source_file": "api/main.py", "community": "1"},
+                {"id": "api_rotas", "label": "rotas()", "source_file": "api/main.py", "community": "1"},
+                {"id": "api_auth", "label": "auth.py", "source_file": "api/auth.py", "community": "1"},
+                {"id": "db_modelo", "label": "Modelo", "source_file": "db/modelo.py", "community": "2"},
+                {"id": "db_sessao", "label": "sessao()", "source_file": "db/sessao.py", "community": "2"},
+                {"id": "solto", "label": "util.py", "source_file": "util.py", "community": "2"}],
+                "links": [{"source": "api_main", "target": "api_rotas"},
+                          {"source": "api_main", "target": "api_auth"},
+                          {"source": "api_main", "target": "db_modelo"},
+                          {"source": "db_modelo", "target": "db_sessao"}],
+                "built_at_commit": commit},
+                open(os.path.join(repo, "graphify-out", "graph.json"), "w"))
+
+        grava_grafo(head)
+        _json.dump({"1": "API HTTP", "2": "Banco"},
+                   open(os.path.join(repo, "graphify-out", ".graphify_labels.json"), "w"))
+        open(os.path.join(repo, "graphify-out", "GRAPH_REPORT.md"), "w", encoding="utf-8").write(
+            "# Report\n\n## Surprising connections\n\n- main.py toca Modelo\n\n## Stats\n\n- 6 nodes\n")
+
+        # hub sem linha Repo: -> erro de uso; com repo= registra e responde
+        assert "Repo:" in erro_de_uso(sv.mapa_codigo, projeto="demo")
+        m = sv.mapa_codigo(projeto="demo", repo=repo)
+        assert "6 nós, 4 arestas" in m and "atualizado" in m, m
+        assert "- API HTTP — 3 nós: main.py" in m and "- Banco — 3 nós" in m, m
+        assert "- main.py (api/main.py) — grau 3" in m, m
+        assert "Surprising connections:" in m and "- main.py toca Modelo" in m, m
+        assert f"Repo: {repo}" in arq("demo", "demo.md")
+        # commit novo no repo -> grafo atrasado
+        open(os.path.join(repo, "b.py"), "w").write("y = 2\n")
+        g("add", "-A", cwd=repo)
+        g("commit", "-q", "-m", "mais", cwd=repo)
+        assert "atrasado 1 commit(s)" in sv.mapa_codigo(projeto="demo"), sv.mapa_codigo(projeto="demo")
+
+        assert "exatamente um" in erro_de_uso(sv.consultar_codigo, projeto="demo")
+        if shutil.which("graphify"):
+            try:   # so a fiacao: o grafo sintetico pode nao agradar ao CLI
+                assert sv.consultar_codigo(projeto="demo", explicar="main.py").strip(), "sem saida"
+            except sv.ErroUso as e:
+                assert "graphify falhou" in str(e), e
+        else:
+            assert "pip install graphifyy" in erro_de_uso(sv.consultar_codigo, projeto="demo",
+                                                          pergunta="quem chama main?")
+
+        r = sv.salvar_nota(projeto="demo", tipo="evolucao", titulo="Leva", corpo="x", resumo="r",
+                           arquivos=["api/main.py", "db/sessao.py", "nao/existe.py"])
+        assert "Componentes: 3 nós em 2 comunidades; 1 arquivo(s) sem nó" in r, r
+        nota = arq("demo", "Evolucoes", sv.hoje() + " Leva.md")
+        assert "## Componentes tocados" in nota, nota
+        assert "- API HTTP: main.py, rotas() (2 nós)" in nota and "- Banco: sessao() (1 nós)" in nota, nota
+        assert "- sem nó no grafo: nao/existe.py" in nota and "Mapa: [[" not in nota, nota
+
+        r = sv.gerar_mapa(projeto="demo", leitura="Minha leitura.")
+        assert "Salva: demo/Mapa do Codigo demo.md" in r, r
+        mapa = arq("demo", "Mapa do Codigo demo.md")
+        assert "## Leitura curada\n\nMinha leitura." in mapa and "## Comunidades" in mapa, mapa
+        assert "## God nodes" in mapa and "## Conexões e perguntas (GRAPH_REPORT)" in mapa, mapa
+        sv.gerar_mapa(projeto="demo")
+        assert "Minha leitura." in arq("demo", "Mapa do Codigo demo.md")
+        assert "[[Mapa do Codigo demo]]" in arq("demo", "demo.md")
+        r = sv.salvar_nota(projeto="demo", tipo="bug", titulo="Falha", corpo="b", resumo="r",
+                           arquivos=["api/auth.py"])
+        assert "Mapa: [[Mapa do Codigo demo]]" in arq("demo", "Bugs", sv.hoje() + " Falha.md")
+        # sem graphify-out: leitura avisa, gravacao nao trava
+        shutil.rmtree(os.path.join(repo, "graphify-out"))
+        assert "sem grafo em" in erro_de_uso(sv.mapa_codigo, projeto="demo")
+        r = sv.salvar_nota(projeto="demo", tipo="analise", titulo="Sem grafo", corpo="c", resumo="r",
+                           arquivos=["api/main.py"])
+        assert "grafo indisponivel" in r and "Salva: demo/Analises/" in r, r
+
 else:
     print("git ausente: teste de commit/push pulado")
+
+assert [f["name"] for f in sv.FERRAMENTAS] == [
+    "visao_geral", "buscar", "listar_notas", "ler_nota", "conexoes", "salvar_nota",
+    "atualizar_nota", "mapa_codigo", "consultar_codigo", "gerar_mapa"], "lista de ferramentas"
+assert "arquivos" in sv.MAPA["salvar_nota"]["inputSchema"]["properties"]
 
 print("ok")

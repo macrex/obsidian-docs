@@ -25,6 +25,9 @@ Ferramentas:
   conexoes        wikilinks de saida e backlinks (navegacao no grafo)
   salvar_nota     cria a nota com tudo que a convencao exige (e hub/Home novos)
   atualizar_nota  corpo, status, tags, sucessora (obsoleta) ou resumo no hub
+  mapa_codigo     mapa do codigo (graphify-out do repo, ponteiro Repo: do hub)
+  consultar_codigo pergunta ao grafo via CLI graphify (query/explain/path)
+  gerar_mapa      regrava a nota Mapa do Codigo preservando a Leitura curada
 
 Vault que e repositorio git: cada gravacao faz commit -> pull --rebase -> push
 (desligue com `--sem-git` no registro). Autoteste: mcp/teste_servidor_vault.py
@@ -38,7 +41,7 @@ import subprocess
 import sys
 import time
 import unicodedata
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 PROTOCOLOS = {"2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"}
 PROTOCOLO_PADRAO = "2025-06-18"
@@ -61,8 +64,10 @@ INSTRUCOES = (
     "evolucoes, analises). Estrutura: Home.md -> <projeto>/<projeto>.md (hub) -> "
     "Specs/, Arquitetura/, Bugs/, Evolucoes/, Analises/. Ler: visao_geral, buscar, "
     "listar_notas, ler_nota, conexoes. Gravar: salvar_nota (nota nova; faz pasta, "
-    "nome, frontmatter, hub, Home e git) e atualizar_nota (nota existente). Nunca "
-    "escreva ou leia os arquivos do vault por fora destas ferramentas."
+    "nome, frontmatter, hub, Home e git) e atualizar_nota (nota existente). "
+    "Codigo: mapa_codigo (antes de mexer no projeto), consultar_codigo (arquitetura), "
+    "gerar_mapa (apos o graphify); salvar_nota aceita arquivos= para citar componentes. "
+    "Nunca escreva ou leia os arquivos do vault por fora destas ferramentas."
 )
 
 ERRO_VAULT = (
@@ -495,7 +500,7 @@ def garantir_hub(projeto, descricao, repo):
 
 def salvar_nota(projeto="", tipo="", titulo="", corpo="", resumo="", status="ativo",
                 tags=None, data=None, artefato=None, descricao_projeto=None, repo=None,
-                sobrescrever=False):
+                sobrescrever=False, arquivos=None):
     projeto, titulo = nome_seguro(projeto), nome_seguro(titulo)
     tipo, status = normalizar(tipo), normalizar(status or "ativo")
     resumo = " ".join(str(resumo or "").split())
@@ -527,6 +532,14 @@ def salvar_nota(projeto="", tipo="", titulo="", corpo="", resumo="", status="ati
                       "regravar do zero: sobrescrever=true.")
     todas = notas()
     hub_novo = garantir_hub(projeto, descricao_projeto, repo)
+    aviso = None
+    if arquivos:
+        lista = arquivos.split(",") if isinstance(arquivos, str) else list(arquivos)
+        try:
+            secao, aviso = componentes_tocados(projeto, lista, repo)
+            corpo = str(corpo).rstrip("\n") + "\n\n" + secao
+        except ErroUso as e:
+            aviso = f"Componentes: grafo indisponivel ({e})"
     texto = (bloco_frontmatter(projeto, tipo, status, data, tags) + "\n"
              + com_cabecalho(corpo, titulo, projeto) + "\n")
     escrever(caminho, texto)
@@ -548,6 +561,8 @@ def salvar_nota(projeto="", tipo="", titulo="", corpo="", resumo="", status="ati
     if quebrados:
         linhas.append("Wikilinks sem nota no vault (corrija ou crie a nota): "
                       + ", ".join(f"[[{l}]]" for l in quebrados))
+    if aviso:
+        linhas.append(aviso)
     linhas.append("Git: " + sincronizar(f"{projeto}: {nome if tipo == 'mapa' else titulo}"))
     return "\n".join(linhas)
 
@@ -613,6 +628,249 @@ def atualizar_nota(nota="", corpo=None, status=None, tags=None, sucessora=None, 
             + sincronizar(f"{projeto}: {alvo['nome']}"))
 
 
+# ---------- graphify (grafo de codigo do repo, via ponteiro Repo: do hub) ----------
+
+REPO_RE = re.compile(r"(?m)^Repo:\s*(.+?)\s*$")
+TETO_SAIDA = 8000
+
+
+def git_em(pasta, *args):
+    r = subprocess.run(["git", "-C", pasta, *args], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
+    return r.returncode, (r.stdout + r.stderr).strip()
+
+
+def registrar_repo(texto_hub, repo):
+    """Poe `Repo: <caminho>` no fim do paragrafo de descricao do hub."""
+    linhas = texto_hub.rstrip("\n").split("\n")
+    pos = len(linhas)
+    h1 = next((i for i, l in enumerate(linhas) if l.startswith("# ")), None)
+    if h1 is not None:
+        i = h1 + 1
+        while i < len(linhas) and not linhas[i].strip():
+            i += 1
+        while i < len(linhas) and linhas[i].strip() and not linhas[i].startswith("#"):
+            i += 1
+        pos = i
+    linhas.insert(pos, f"Repo: {repo}")
+    return "\n".join(linhas) + "\n"
+
+
+def repo_do_projeto(projeto, repo=None):
+    """(caminho do repo, registrado_no_hub). Parametro > linha Repo: do hub > erro."""
+    hub = os.path.join(VAULT, projeto, projeto + ".md")
+    if not os.path.exists(hub):
+        raise ErroUso(f'projeto "{projeto}" nao tem hub no vault (visao_geral lista os que existem)')
+    texto = ler(hub)
+    m = REPO_RE.search(texto)
+    registrado = False
+    if repo:
+        repo = os.path.abspath(os.path.expanduser(str(repo)))
+        if not m:
+            escrever(hub, registrar_repo(texto, repo))
+            registrado = True
+    elif m:
+        repo = m.group(1)
+    else:
+        raise ErroUso(f"hub de {projeto} sem linha `Repo:`; passe repo=<caminho do repositorio>")
+    if not os.path.isdir(repo):
+        raise ErroUso(f"repo nao esta nesta maquina: {repo}")
+    return repo, registrado
+
+
+def grafo_do_projeto(projeto, repo=None):
+    """(repo, registrado, grafo, pasta do graphify-out)."""
+    repo, registrado = repo_do_projeto(projeto, repo)
+    pasta = os.path.join(repo, "graphify-out")
+    caminho = os.path.join(pasta, "graph.json")
+    if not os.path.exists(caminho):
+        raise ErroUso(f"sem grafo em {pasta}: rode /graphify-ai no repo "
+                      "(graphify-out fica no repo, no .gitignore)")
+    with open(caminho, encoding="utf-8") as f:
+        return repo, registrado, json.load(f), pasta
+
+
+def frescor(repo, g):
+    commit = str(g.get("built_at_commit") or "")
+    curto = commit[:7] or "?"
+    if not shutil.which("git") or git_em(repo, "rev-parse", "--is-inside-work-tree")[0] != 0:
+        return f"Commit do grafo: {curto} | sem git"
+    head = git_em(repo, "rev-parse", "HEAD")[1][:7]
+    if not commit:
+        estado = "commit do grafo desconhecido"
+    elif commit[:7] == head:
+        estado = "atualizado"
+    else:
+        rc, n = git_em(repo, "rev-list", "--count", f"{commit}..HEAD")
+        estado = f"atrasado {n} commit(s)" if rc == 0 else "atrasado (commit do grafo fora do historico)"
+    return f"Commit do grafo: {curto} | HEAD: {head} | {estado}"
+
+
+def rotulos_comunidades(pasta):
+    p = os.path.join(pasta, ".graphify_labels.json")
+    try:
+        d = json.load(open(p, encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if isinstance(d, dict) and isinstance(d.get("labels"), dict):
+        d = d["labels"]
+    return {str(k): str(v) for k, v in d.items()} if isinstance(d, dict) else {}
+
+
+def analisar_grafo(g, pasta):
+    """(nos por id, grau, [(rotulo, ids por grau desc)] por tamanho desc, god nodes, n arestas)."""
+    nos = {n["id"]: n for n in g.get("nodes", []) if isinstance(n, dict) and "id" in n}
+    arestas = g.get("links") or g.get("edges") or []
+    grau = Counter()
+    for e in arestas:
+        grau[e.get("source")] += 1
+        grau[e.get("target")] += 1
+    rotulos = rotulos_comunidades(pasta)
+    por_comunidade = defaultdict(list)
+    for nid, n in nos.items():
+        por_comunidade[str(n.get("community", "?"))].append(nid)
+    comunidades = []
+    for cid, ids in por_comunidade.items():
+        ids.sort(key=lambda i: -grau[i])
+        comunidades.append((rotulos.get(cid, f"comunidade {cid}"), ids))
+    comunidades.sort(key=lambda c: -len(c[1]))
+    god = sorted(nos, key=lambda i: -grau[i])[:10]
+    return nos, grau, comunidades, god, len(arestas)
+
+
+def secoes_do_report(pasta):
+    """Secoes do GRAPH_REPORT.md sobre conexoes e perguntas, ate 30 linhas cada."""
+    p = os.path.join(pasta, "GRAPH_REPORT.md")
+    if not os.path.exists(p):
+        return ""
+    saida, pegar, n = [], False, 0
+    for l in ler(p).split("\n"):
+        if l.startswith("#"):
+            t = normalizar(l)
+            pegar = any(k in t for k in ("connection", "conex", "question", "pergunta"))
+            n = 0
+            if pegar:
+                saida.append(l.lstrip("#").strip() + ":")
+            continue
+        if pegar and l.strip() and n < 30:
+            saida.append(l)
+            n += 1
+    return "\n".join(saida)
+
+
+def resumo_grafo(g, pasta):
+    """(linhas de comunidades, linhas de god nodes, texto do report, n nos, n arestas)."""
+    nos, grau, comunidades, god, n_arestas = analisar_grafo(g, pasta)
+
+    def rot(i):
+        return str(nos[i].get("label") or i)
+
+    com = [f"- {nome} — {len(ids)} nós: " + ", ".join(rot(i) for i in ids[:3])
+           for nome, ids in comunidades]
+    gods = [f"- {rot(i)} ({nos[i].get('source_file', '?')}) — grau {grau[i]}" for i in god]
+    return com, gods, secoes_do_report(pasta), len(nos), n_arestas
+
+
+def mapa_codigo(projeto="", repo=None):
+    repo, registrado, g, pasta = grafo_do_projeto(projeto, repo)
+    com, gods, rep, n_nos, n_arestas = resumo_grafo(g, pasta)
+    linhas = [f"Grafo: {os.path.join(pasta, 'graph.json')} — {n_nos} nós, {n_arestas} arestas",
+              frescor(repo, g), f"Comunidades ({len(com)}):"] + com + ["God nodes (10 por grau):"] + gods
+    if rep:
+        linhas += ["Do GRAPH_REPORT.md:", rep]
+    if registrado:
+        linhas.append("Hub: linha Repo registrada. Git: "
+                      + sincronizar(f"{projeto}: Repo registrado no hub"))
+    return "\n".join(linhas)[:TETO_SAIDA]
+
+
+def componentes_tocados(projeto, arquivos, repo=None):
+    """('## Componentes tocados' pronta, linha-resumo) a partir do grafo do repo."""
+    repo, _, g, pasta = grafo_do_projeto(projeto, repo)
+    nos, grau, comunidades, _, _ = analisar_grafo(g, pasta)
+    rotulo_de = {i: nome for nome, ids in comunidades for i in ids}
+    raiz = repo.replace("\\", "/").rstrip("/") + "/"
+    achados, sem_no, total = defaultdict(list), [], 0
+    for arq in arquivos:
+        a = str(arq).replace("\\", "/").strip()
+        if a.startswith("./"):
+            a = a[2:]
+        if a.startswith(raiz):
+            a = a[len(raiz):]
+        ids = []
+        for i, n in nos.items():
+            sf = str(n.get("source_file") or "").replace("\\", "/")
+            if sf and (sf == a or sf.endswith("/" + a) or a.endswith("/" + sf)):
+                ids.append(i)
+        if not ids:
+            sem_no.append(a)
+            continue
+        for i in sorted(ids, key=lambda i: -grau[i]):
+            achados[rotulo_de.get(i, "?")].append(str(nos[i].get("label") or i))
+        total += len(ids)
+    linhas = ["## Componentes tocados", ""]
+    for nome, labels in sorted(achados.items(), key=lambda kv: -len(kv[1])):
+        extra = f" (+{len(labels) - 8})" if len(labels) > 8 else ""
+        linhas.append(f"- {nome}: " + ", ".join(labels[:8]) + extra + f" ({len(labels)} nós)")
+    if sem_no:
+        linhas.append("- sem nó no grafo: " + ", ".join(sem_no))
+    if os.path.exists(os.path.join(VAULT, projeto, f"Mapa do Codigo {projeto}.md")):
+        linhas.append(f"Mapa: [[Mapa do Codigo {projeto}]]")
+    resumo = f"Componentes: {total} nós em {len(achados)} comunidades; {len(sem_no)} arquivo(s) sem nó"
+    return "\n".join(linhas), resumo
+
+
+LEITURA_RE = re.compile(r"(?ms)^## Leitura curada\s*\n(.*?)(?=^## |\Z)")
+
+
+def gerar_mapa(projeto="", leitura=None, repo=None):
+    repo, _, g, pasta = grafo_do_projeto(projeto, repo)
+    nome = f"Mapa do Codigo {projeto}"
+    existente = os.path.join(VAULT, projeto, nome + ".md")
+    if leitura is None and os.path.exists(existente):
+        m = LEITURA_RE.search(ler(existente))
+        leitura = m.group(1) if m else None
+    leitura = (leitura or "").strip() or "(ainda sem leitura curada — passe leitura em gerar_mapa)"
+    com, gods, rep, _, _ = resumo_grafo(g, pasta)
+    commit = str(g.get("built_at_commit") or "")[:7] or "?"
+    corpo = [f"# {nome}", "",
+             f"Projeto: [[{projeto}]]. Gerado do graphify-out em {hoje()} (commit {commit}).", "",
+             "## Leitura curada", "", leitura, "", "## Comunidades", ""] + com + \
+            ["", "## God nodes", ""] + gods
+    if rep:
+        corpo += ["", "## Conexões e perguntas (GRAPH_REPORT)", "", rep]
+    return salvar_nota(projeto=projeto, tipo="mapa", titulo=nome, corpo="\n".join(corpo), repo=repo)
+
+
+def consultar_codigo(projeto="", pergunta=None, explicar=None, caminho=None, repo=None):
+    if sum(1 for x in (pergunta, explicar, caminho) if x) != 1:
+        raise ErroUso("informe exatamente um de: pergunta, explicar, caminho=[A, B]")
+    exe = shutil.which("graphify")
+    if not exe:
+        raise ErroUso("graphify nao instalado: pip install graphifyy")
+    repo, registrado, _, pasta = grafo_do_projeto(projeto, repo)
+    grafo = os.path.join(pasta, "graph.json")
+    if pergunta:
+        cmd = [exe, "query", str(pergunta), "--graph", grafo, "--budget", "2000"]
+    elif explicar:
+        cmd = [exe, "explain", str(explicar), "--graph", grafo]
+    else:
+        if not isinstance(caminho, list) or len(caminho) != 2:
+            raise ErroUso("caminho deve ser uma lista com dois rotulos: [A, B]")
+        cmd = [exe, "path", str(caminho[0]), str(caminho[1]), "--graph", grafo]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=60, cwd=repo)
+    except subprocess.TimeoutExpired:
+        raise ErroUso("graphify demorou mais de 60 s")
+    if r.returncode != 0:
+        raise ErroUso(f"graphify falhou: {(r.stderr or r.stdout).strip()[-500:]}")
+    saida = r.stdout.strip() or "(sem resultado)"
+    if registrado:
+        saida += "\nHub: linha Repo registrada. Git: " + sincronizar(f"{projeto}: Repo registrado no hub")
+    return saida[:TETO_SAIDA]
+
+
 # ---------- definicao das ferramentas ----------
 
 def esquema(props, *obrigatorios):
@@ -631,6 +889,11 @@ P_STATUS = {"type": "string",
 P_NOTA = {"type": "string",
           "description": "Caminho relativo ao vault (projeto/Specs/2026-01-02 "
                          "X.md) ou nome da nota como em wikilink (2026-01-02 X)."}
+
+P_PROJ = {"type": "string", "description": "Nome do projeto (pasta no vault)."}
+P_REPO = {"type": "string",
+          "description": "Caminho local do repositorio; so se o hub nao tiver a linha "
+                         "`Repo:` (fica registrado nele)."}
 
 FERRAMENTAS = [
     {"name": "visao_geral",
@@ -704,9 +967,14 @@ FERRAMENTAS = [
                                "description": "So para projeto NOVO: 1 linha para o hub "
                                               "e o Home."},
          "repo": {"type": "string",
-                  "description": "So para projeto novo: caminho local do repositorio."},
+                  "description": "Caminho local do repositorio: usado ao criar o hub e como "
+                                 "ponteiro do graphify (registrado no hub se faltar)."},
          "sobrescrever": {"type": "boolean",
                           "description": "Regrava se a nota ja existir (padrao false)."},
+         "arquivos": {"type": "array", "items": {"type": "string"},
+                      "description": "Caminhos (relativos ao repo) tocados pela leva: o "
+                                     "servidor anexa a secao Componentes tocados a partir "
+                                     "do grafo do graphify (evolucao, bug, spec de mudanca)."},
      }, "projeto", "tipo", "titulo", "corpo"),
      "fn": salvar_nota},
     {"name": "atualizar_nota",
@@ -725,6 +993,35 @@ FERRAMENTAS = [
          "resumo": {"type": "string", "description": "Nova linha de resumo no hub."},
      }, "nota"),
      "fn": atualizar_nota},
+    {"name": "mapa_codigo",
+     "description": "Mapa do codigo do projeto a partir do graphify-out do repo (ponteiro "
+                    "Repo: do hub): frescor do grafo, comunidades, god nodes e destaques do "
+                    "GRAPH_REPORT. Leia antes de mexer no codigo.",
+     "inputSchema": esquema({"projeto": P_PROJ, "repo": P_REPO}, "projeto"),
+     "fn": mapa_codigo},
+    {"name": "consultar_codigo",
+     "description": "Pergunta de arquitetura ao grafo do graphify (CLI local): `pergunta` "
+                    "livre, `explicar` um no, ou `caminho` entre dois nos. Exatamente um.",
+     "inputSchema": esquema({
+         "projeto": P_PROJ,
+         "pergunta": {"type": "string", "description": "Pergunta livre (BFS no grafo)."},
+         "explicar": {"type": "string", "description": "Rotulo do no a explicar."},
+         "caminho": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 2,
+                     "description": "Dois rotulos: caminho mais curto de A a B."},
+         "repo": P_REPO,
+     }, "projeto"),
+     "fn": consultar_codigo},
+    {"name": "gerar_mapa",
+     "description": "Regrava a nota `Mapa do Codigo <projeto>` a partir do graphify-out "
+                    "(comunidades, god nodes, GRAPH_REPORT) preservando a secao Leitura "
+                    "curada; passe `leitura` para atualiza-la. Chame apos cada rodada do graphify.",
+     "inputSchema": esquema({
+         "projeto": P_PROJ,
+         "leitura": {"type": "string", "description": "Sua leitura curada (dominios, o que "
+                                                      "vale saber, lacunas)."},
+         "repo": P_REPO,
+     }, "projeto"),
+     "fn": gerar_mapa},
 ]
 MAPA = {f["name"]: f for f in FERRAMENTAS}
 
