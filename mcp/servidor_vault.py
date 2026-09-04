@@ -539,8 +539,8 @@ def salvar_nota(projeto="", tipo="", titulo="", corpo="", resumo="", status="ati
     if arquivos:
         lista = arquivos.split(",") if isinstance(arquivos, str) else list(arquivos)
         try:
-            secao, aviso = componentes_tocados(projeto, lista, repo)
-            corpo = str(corpo).rstrip("\n") + "\n\n" + secao
+            componentes, aviso = componentes_tocados(projeto, lista, repo)
+            corpo = str(corpo).rstrip("\n") + "\n\n" + componentes
         except ErroUso as e:
             aviso = f"Componentes: grafo indisponivel ({e})"
     texto = (bloco_frontmatter(projeto, tipo, status, data, tags) + "\n"

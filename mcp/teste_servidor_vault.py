@@ -99,6 +99,22 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "- [[2026-01-03 Ticket 01]] — feito" in arq("demo", "demo.md")
     assert "hub" in erro_de_uso(sv.atualizar_nota, nota="demo", status="ativo")
 
+    # arquivos= nao pode sequestrar a secao do hub: a entrada da nota vai para a
+    # secao do tipo dela, e "## Componentes tocados" fica na nota, nunca no hub
+    _orig = sv.componentes_tocados
+    sv.componentes_tocados = lambda p, a, r=None: ("## Componentes tocados\n\n- C: x (1 nos)", "ok")
+    try:
+        sv.salvar_nota(projeto="demo", tipo="bug", titulo="Falha Z", corpo="c",
+                       resumo="falha z", arquivos=["a.java"], data="2026-01-04")
+    finally:
+        sv.componentes_tocados = _orig
+    hub = arq("demo", "demo.md")
+    assert "## ## " not in hub and "## Componentes tocados" not in hub, hub
+    secao_bugs = hub[hub.index("## Bugs"):]
+    secao_bugs = secao_bugs[:secao_bugs.index("\n## ")] if "\n## " in secao_bugs else secao_bugs
+    assert "[[2026-01-04 Falha Z]]" in secao_bugs, hub
+    assert "## Componentes tocados" in arq("demo", "Bugs", "2026-01-04 Falha Z.md")
+
     # leitura enxerga a escrita; wikilink quebrado e avisado
     assert "2026-01-03 Ticket 01" in sv.buscar("novo corpo")
     r = sv.salvar_nota(projeto="demo", tipo="analise", titulo="Estudo", corpo="Ver [[Nao Existe]].",
